@@ -73,8 +73,18 @@ static UIBarButtonItem *PLXProxyFor(UIBarButtonItem *item) {
         if (!control) return nil;
         __weak UIControl *weakControl = control;
         NSString *label = control.accessibilityLabel ?: @"";
-        proxy = [[UIBarButtonItem alloc] initWithImage:PLXSnapshotIcon(control) style:UIBarButtonItemStylePlain target:nil action:nil];
-        proxy.primaryAction = [UIAction actionWithTitle:label image:PLXSnapshotIcon(control) identifier:nil handler:^(UIAction *a) {
+        // Plex's back button on some screens (More) is a chevron plus the word
+        // "Back"; a snapshot of both overflows the vertical bar's round button,
+        // so it gets the system's back chevron, like other back buttons there.
+        UIImage *icon = nil;
+        if ([control isKindOfClass:UIButton.class] && ((UIButton *)control).currentTitle.length && ((UIButton *)control).currentImage) {
+            icon = [UIImage systemImageNamed:@"chevron.backward"];
+            if (!label.length) label = ((UIButton *)control).currentTitle;
+        } else {
+            icon = PLXSnapshotIcon(control);
+        }
+        proxy = [[UIBarButtonItem alloc] initWithImage:icon style:UIBarButtonItemStylePlain target:nil action:nil];
+        proxy.primaryAction = [UIAction actionWithTitle:label image:icon identifier:nil handler:^(UIAction *a) {
             [weakControl sendActionsForControlEvents:UIControlEventTouchUpInside];
         }];
     }
