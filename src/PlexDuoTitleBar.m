@@ -97,13 +97,17 @@ static void PLXSetSoftTopEdge(UIViewController *controller, BOOL on) {
     }
 }
 
+static BOOL PLXClearTitleBarOn(UIWindow *window) {
+    NSInteger edge = 0;
+    if (@available(iOS 27.1, *)) edge = window ? window.traitCollection.verticalBarEdge : 0;
+    return edge != 0 && PLXSettingBool(PLXSettingClearTitleBar);
+}
+
 static IMP PLXOrigTitleBarLayout;
 
 static void PLXTitleBarLayoutSubviews(UINavigationBar *self, SEL _cmd) {
     ((void (*)(id, SEL))PLXOrigTitleBarLayout)(self, _cmd);
-    NSInteger edge = 0;
-    if (@available(iOS 27.1, *)) edge = self.window ? self.window.traitCollection.verticalBarEdge : 0;
-    BOOL on = edge != 0 && PLXSettingBool(PLXSettingClearTitleBar);
+    BOOL on = PLXClearTitleBarOn(self.window);
     UINavigationItem *top = self.topItem;
     UIViewController *controller = [self.delegate isKindOfClass:UINavigationController.class] ? ((UINavigationController *)self.delegate).topViewController : nil;
     if (top) dispatch_async(dispatch_get_main_queue(), ^{
@@ -112,7 +116,19 @@ static void PLXTitleBarLayoutSubviews(UINavigationBar *self, SEL _cmd) {
     });
 }
 
+// A pushed screen's item only becomes the bar's top item when the push
+// animation ends, so the layout hook alone left Plex's gray bar showing while
+// the screen slid in. Clear the item before the push starts.
+static IMP PLXOrigPush;
+
+static void PLXPush(UINavigationController *self, SEL _cmd, UIViewController *controller, BOOL animated) {
+    if (controller && PLXClearTitleBarOn(self.view.window)) PLXApplyTitleBar(controller.navigationItem, YES);
+    ((void (*)(id, SEL, id, BOOL))PLXOrigPush)(self, _cmd, controller, animated);
+}
+
 __attribute__((constructor)) static void PLXInstallTitleBar(void) {
+    Method push = class_getInstanceMethod(UINavigationController.class, @selector(pushViewController:animated:));
+    PLXOrigPush = method_setImplementation(push, (IMP)PLXPush);
     Method layout = class_getInstanceMethod(UINavigationBar.class, @selector(layoutSubviews));
     PLXOrigTitleBarLayout = method_setImplementation(layout, (IMP)PLXTitleBarLayoutSubviews);
     Class item = UINavigationItem.class;
