@@ -134,13 +134,11 @@ static void PLXSelectBarItem(UITabBar *bar, UITabBarItem *item) {
 // The top of the mini player, in the owner's coordinates, so the native bar
 // sits above it instead of underneath. CGFLOAT_MAX when no mini player shows.
 static CGFloat PLXMiniPlayerTop(UIView *owner) {
-    static Class miniPlayerClass;
-    if (!miniPlayerClass) miniPlayerClass = NSClassFromString(@"PMMiniPlayerView");
     __block CGFloat top = CGFLOAT_MAX;
     __block void (^visit)(UIView *);
     __block __weak void (^weakVisit)(UIView *);
     weakVisit = visit = ^(UIView *v) {
-        if ([v isKindOfClass:miniPlayerClass]) {
+        if (PLXIsMiniPlayerView(v)) {
             // A floating card sits beside the tabs, which then run to the bottom.
             BOOL shown = !v.hidden && v.alpha > 0.01 && v.window && !PLXMiniPlayerFloats(v);
             for (UIView *s = v.superview; shown && s; s = s.superview) if (s.hidden) shown = NO;
@@ -428,6 +426,20 @@ static PLXCustomTabs *PLXCustom;
 
 @end
 
+// The system places the vertical tab bar inside its host's safe area. On the
+// unfolded screen the window does not reserve the vertical bar's column (it
+// reports a top inset instead), so the tab bar lands flush against the screen
+// edge, 24 pt outside the column the bar buttons use. Reserve the column on
+// the host so both line up.
+
+static void PLXReserveVerticalBarColumn(UIViewController *host, UIWindow *window, NSInteger edge) {
+    UIEdgeInsets windowSafe = window.safeAreaInsets;
+    UIEdgeInsets extra = UIEdgeInsetsZero;
+    if (edge == 2) extra.right = MAX(0, PLXVerticalBarColumnWidth - windowSafe.right);
+    if (edge == 1) extra.left = MAX(0, PLXVerticalBarColumnWidth - windowSafe.left);
+    if (!UIEdgeInsetsEqualToEdgeInsets(host.additionalSafeAreaInsets, extra)) host.additionalSafeAreaInsets = extra;
+}
+
 static void PLXUpdateCustomTabs(UIWindow *window) {
     NSInteger edge = 0;
     if (@available(iOS 27.1, *)) edge = window ? window.traitCollection.verticalBarEdge : 0;
@@ -454,6 +466,7 @@ static void PLXUpdateCustomTabs(UIWindow *window) {
     }
     [PLXCustom reloadIfNeeded];
     controller.view.hidden = controller.viewControllers.count == 0;
+    PLXReserveVerticalBarColumn(controller, window, edge);
     CGRect frame = root.view.bounds;
     CGFloat miniPlayerTop = PLXMiniPlayerTop(root.view);
     if (miniPlayerTop < CGRectGetMaxY(frame)) frame.size.height = MAX(0, miniPlayerTop);
@@ -535,6 +548,7 @@ static void PLXUpdateNativeTabs(UITabBar *tabBar) {
     objc_setAssociatedObject(tabBar, @selector(alpha), @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     controller.view.hidden = !PLXPlexBarShowing(tabBar);
 
+    PLXReserveVerticalBarColumn(controller, tabBar.window, edge);
     CGRect frame = owner.view.bounds;
     CGFloat miniPlayerTop = PLXMiniPlayerTop(owner.view);
     if (miniPlayerTop < CGRectGetMaxY(frame)) frame.size.height = MAX(0, miniPlayerTop - CGRectGetMinY(frame));

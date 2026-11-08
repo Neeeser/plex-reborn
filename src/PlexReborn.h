@@ -37,6 +37,15 @@ UIBarButtonItem *PLXLibraryTabsItemForNavigationItem(UINavigationItem *item);
 // The mini player is a floating card, so content and the vertical bar's tabs run past it.
 BOOL PLXMiniPlayerFloats(UIView *miniPlayer);
 
+// Plex's mini player: PMMiniPlayerView on compact-width screens (folded) and
+// PMMiniPlayerViewFullSize on regular-width ones (unfolded landscape).
+BOOL PLXIsMiniPlayerView(UIView *view);
+
+// Width of the vertical bar's column (12 pt padding, 48 pt bar, 24 pt to the
+// edge). The folded screen reserves it as a safe-area inset; the unfolded
+// screen does not, so code that sits beside the bar uses at least this much.
+static const CGFloat PLXVerticalBarColumnWidth = 84;
+
 // Top of the tabs shown in the vertical bar, in window coordinates; CGFLOAT_MAX when none show.
 CGFloat PLXVerticalTabsTop(UIWindow *window);
 

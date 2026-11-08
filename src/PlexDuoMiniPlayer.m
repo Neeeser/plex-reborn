@@ -60,7 +60,8 @@ static PLXMiniPlayerState *PLXInstallMiniPlayerGuide(UIView *view) {
         if (other == view || other == nil) continue; // UIKit's own definition of the safe area
         [old addObject:c];
     }
-    if (old.count == 0) return nil;
+    // The full-size mini player has no safe-area constraints; it still gets a
+    // state so it can float.
 
     state = [PLXMiniPlayerState new];
     state.guide = [UILayoutGuide new];
@@ -94,6 +95,18 @@ static void PLXSetConstant(NSLayoutConstraint *c, CGFloat value) {
 static NSInteger PLXVerticalBarEdge(UIView *view) {
     if (@available(iOS 27.1, *)) return view.window ? view.window.traitCollection.verticalBarEdge : 0;
     return 0;
+}
+
+static BOOL PLXIsFullSizeMiniPlayer(UIView *view) {
+    static Class fullSize;
+    if (!fullSize) fullSize = NSClassFromString(@"PMMiniPlayerViewFullSize");
+    return fullSize && [view isKindOfClass:fullSize];
+}
+
+BOOL PLXIsMiniPlayerView(UIView *view) {
+    static Class compact;
+    if (!compact) compact = NSClassFromString(@"PMMiniPlayerView");
+    return (compact && [view isKindOfClass:compact]) || PLXIsFullSizeMiniPlayer(view);
 }
 
 #pragma mark - Floating card
@@ -173,8 +186,11 @@ static BOOL PLXStartFloating(UIView *miniPlayer, PLXMiniPlayerState *state) {
     UIResponder *next = content.nextResponder;
     state.navigationController = [next isKindOfClass:UIViewController.class] ? (UIViewController *)next : nil;
 
-    state.cardHeight = [miniPlayer.heightAnchor constraintEqualToConstant:PLXCardHeight];
-    state.cardHeight.active = YES;
+    // The full-size mini player lays its row out for its own 60 pt height.
+    if (!PLXIsFullSizeMiniPlayer(miniPlayer)) {
+        state.cardHeight = [miniPlayer.heightAnchor constraintEqualToConstant:PLXCardHeight];
+        state.cardHeight.active = YES;
+    }
 
     state.background = miniPlayer.backgroundColor;
     miniPlayer.backgroundColor = UIColor.clearColor;
@@ -211,7 +227,9 @@ static void PLXSetAddedBottomInset(PLXMiniPlayerState *state, CGFloat inset) {
 
 static void PLXStopFloating(UIView *miniPlayer, PLXMiniPlayerState *state) {
     if (!state.floating) return;
-    [NSLayoutConstraint deactivateConstraints:@[state.navToBottom, state.cardHeight]];
+    [NSLayoutConstraint deactivateConstraints:@[state.navToBottom]];
+    state.cardHeight.active = NO;
+    state.cardHeight = nil;
     [NSLayoutConstraint activateConstraints:@[state.navToContainer]];
     [state.containerPins enumerateObjectsUsingBlock:^(NSLayoutConstraint *pin, NSUInteger i, BOOL *stop) {
         pin.constant = state.containerPinConstants[i].doubleValue;
@@ -230,8 +248,9 @@ static void PLXLayoutFloating(UIView *miniPlayer, PLXMiniPlayerState *state, NSI
     UIEdgeInsets safe = root.safeAreaInsets;
     BOOL rightToLeft = miniPlayer.effectiveUserInterfaceLayoutDirection == UIUserInterfaceLayoutDirectionRightToLeft;
     BOOL barOnRight = (edge == 2) != rightToLeft;
-    CGFloat left = barOnRight ? MAX(safe.left, PLXMiniPlayerEdgeMargin) : safe.left + PLXCardGap;
-    CGFloat right = barOnRight ? safe.right + PLXCardGap : MAX(safe.right, PLXMiniPlayerEdgeMargin);
+    CGFloat barSide = PLXVerticalBarColumnWidth + PLXCardGap;
+    CGFloat left = barOnRight ? MAX(safe.left, PLXMiniPlayerEdgeMargin) : MAX(safe.left + PLXCardGap, barSide);
+    CGFloat right = barOnRight ? MAX(safe.right + PLXCardGap, barSide) : MAX(safe.right, PLXMiniPlayerEdgeMargin);
     // The card sits just above the home indicator; the container (Plex's,
     // which hugs the mini player) is the card plus that gap.
     CGFloat bottom = MAX(PLXMiniPlayerEdgeMargin, safe.bottom - 16);
@@ -247,7 +266,8 @@ static void PLXLayoutFloating(UIView *miniPlayer, PLXMiniPlayerState *state, NSI
 
     // Padding at the bottom of the screens so their content scrolls clear of the card.
     BOOL shown = !container.hidden && !miniPlayer.hidden && CGRectGetMinY(container.frame) < CGRectGetHeight(root.bounds) - 1;
-    CGFloat cardTopFromBottom = PLXCardHeight + bottom;
+    CGFloat cardHeight = state.cardHeight ? PLXCardHeight : CGRectGetHeight(miniPlayer.bounds);
+    CGFloat cardTopFromBottom = cardHeight + bottom;
     PLXSetAddedBottomInset(state, shown ? MAX(0, cardTopFromBottom + PLXCardGap - safe.bottom) : 0);
 }
 
@@ -296,24 +316,37 @@ static void PLXMiniPlayerLayoutSubviews(UIView *self, SEL _cmd) {
 }
 
 static void PLXFindMiniPlayers(UIView *view, NSMutableArray<UIView *> *found) {
-    static Class miniPlayerClass;
-    if (!miniPlayerClass) miniPlayerClass = NSClassFromString(@"PMMiniPlayerView");
-    if ([view isKindOfClass:miniPlayerClass]) { [found addObject:view]; return; }
+    if (PLXIsMiniPlayerView(view)) { [found addObject:view]; return; }
     for (UIView *sub in view.subviews) PLXFindMiniPlayers(sub, found);
+}
+
+// Each class gets its own override that calls that class's original layout.
+static IMP PLXOrigFullSizeLayout;
+
+static void PLXFullSizeLayoutSubviews(UIView *self, SEL _cmd) {
+    PLXUpdateMiniPlayer(self);
+    ((void (*)(id, SEL))PLXOrigFullSizeLayout)(self, _cmd);
+}
+
+static void PLXHookLayout(Class cls, IMP replacement, IMP *original) {
+    Method layout = class_getInstanceMethod(cls, @selector(layoutSubviews));
+    // Add an override on the class itself so a superclass implementation is never replaced.
+    if (class_addMethod(cls, @selector(layoutSubviews), replacement, method_getTypeEncoding(layout))) {
+        *original = method_getImplementation(class_getInstanceMethod([cls superclass], @selector(layoutSubviews)));
+    } else {
+        *original = method_setImplementation(layout, replacement);
+    }
 }
 
 static BOOL PLXInstallMiniPlayerFix(void) {
     static BOOL installed;
     if (installed) return YES;
     Class miniPlayer = NSClassFromString(@"PMMiniPlayerView");
-    if (!miniPlayer) return NO;
+    Class fullSize = NSClassFromString(@"PMMiniPlayerViewFullSize");
+    if (!miniPlayer || !fullSize) return NO;
     installed = YES;
-    Method layout = class_getInstanceMethod(miniPlayer, @selector(layoutSubviews));
-    if (class_addMethod(miniPlayer, @selector(layoutSubviews), (IMP)PLXMiniPlayerLayoutSubviews, method_getTypeEncoding(layout))) {
-        PLXOrigMiniPlayerLayout = method_getImplementation(class_getInstanceMethod([miniPlayer superclass], @selector(layoutSubviews)));
-    } else {
-        PLXOrigMiniPlayerLayout = method_setImplementation(layout, (IMP)PLXMiniPlayerLayoutSubviews);
-    }
+    PLXHookLayout(miniPlayer, (IMP)PLXMiniPlayerLayoutSubviews, &PLXOrigMiniPlayerLayout);
+    PLXHookLayout(fullSize, (IMP)PLXFullSizeLayoutSubviews, &PLXOrigFullSizeLayout);
     return YES;
 }
 
