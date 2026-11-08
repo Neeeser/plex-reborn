@@ -1,51 +1,128 @@
-// Hide Plex's online content (Movies & Shows, Rentals, Discover) when the
-// "Hide Plex's online content" setting is on.
+// Hide Plex's online content, each kind on its own setting.
 //
-// Plex pins sources from its own online providers next to the person's
-// libraries: they appear in the side menu and add their hubs to Home. Plex's
-// source manager returns those pinned sources to every screen, so filtering
-// its list removes them everywhere at once. The Watchlist is kept: it also
-// comes from Plex's Discover provider but holds the person's own list.
+// Plex mixes sources from its own online providers in with the person's
+// libraries: Movies & Shows and Rentals (tv.plex.provider.vod), Discover
+// (tv.plex.provider.discover) and its free Live TV channels
+// (tv.plex.provider.epg). They appear in the side menu and the More page, add
+// rows to Home, and Plex's channels fill the Live TV guide beside a server's
+// own DVR channels. Every screen gets its sources from Plex's source manager,
+// so its source lists are filtered: pinned sources (side menu, Home), all
+// sources (More page) and the guide's sources. The Watchlist is kept: it also
+// comes from the Discover provider but holds the person's own list.
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
+#import <objc/message.h>
 #import "PlexReborn.h"
 
-// Plex's source type for the Watchlist (PMKSource.type).
+// Plex's source types (PMKSource.type) used below.
+static const NSInteger PLXSourceTypeRentals = 21;
 static const NSInteger PLXSourceTypeWatchlist = 20;
 
-static BOOL PLXIsPlexOnlineSource(id source) {
-    if (![source respondsToSelector:@selector(providerIdentifier)]) return NO;
+// The setting that hides this source, or nil when the source is not Plex's online content.
+static NSString *PLXHideSettingForSource(id source) {
+    if (![source respondsToSelector:NSSelectorFromString(@"providerIdentifier")]) return nil;
     NSString *provider = [source valueForKey:@"providerIdentifier"];
-    if (![provider isKindOfClass:NSString.class] || ![provider hasPrefix:@"tv.plex.provider."]) return NO;
-    if ([provider isEqualToString:@"tv.plex.provider.vod"]) return YES;
-    if ([provider isEqualToString:@"tv.plex.provider.discover"]) return [[source valueForKey:@"type"] integerValue] != PLXSourceTypeWatchlist;
-    return NO;
+    if (![provider isKindOfClass:NSString.class]) return nil;
+    NSInteger type = [[source valueForKey:@"type"] integerValue];
+    if ([provider isEqualToString:@"tv.plex.provider.vod"]) return type == PLXSourceTypeRentals ? PLXSettingHideRentals : PLXSettingHideMoviesAndShows;
+    if ([provider isEqualToString:@"tv.plex.provider.discover"]) return type == PLXSourceTypeWatchlist ? nil : PLXSettingHideDiscover;
+    if ([provider isEqualToString:@"tv.plex.provider.epg"]) return PLXSettingHidePlexLiveTV;
+    return nil;
 }
 
-static IMP PLXOrigPinnedSources;
+static BOOL PLXIsHidden(id source) {
+    NSString *setting = PLXHideSettingForSource(source);
+    return setting && PLXSettingBool(setting);
+}
+
+// Plex's own Live TV source is also the side menu's way into Live TV, the
+// guide that holds a server's DVR channels too, so it stays in the source
+// lists; only the guide's own list drops it (guide: YES).
+static id PLXFiltered(id sources, BOOL guide) {
+    if (![sources isKindOfClass:NSArray.class]) return sources;
+    NSIndexSet *keep = [sources indexesOfObjectsPassingTest:^BOOL(id s, NSUInteger i, BOOL *stop) {
+        if (!guide && [PLXHideSettingForSource(s) isEqualToString:PLXSettingHidePlexLiveTV]) return YES;
+        return !PLXIsHidden(s);
+    }];
+    return keep.count == [sources count] ? sources : [sources objectsAtIndexes:keep];
+}
+
 static __weak id PLXSourceManager;
+static IMP PLXOrigPinnedSources, PLXOrigAllSources, PLXOrigGuideSources, PLXOrigMainGuideSource;
 
 static id PLXPinnedSources(id self, SEL _cmd) {
     PLXSourceManager = self;
-    NSArray *sources = ((id (*)(id, SEL))PLXOrigPinnedSources)(self, _cmd);
-    if (!PLXSettingBool(PLXSettingHideOnlineContent) || ![sources isKindOfClass:NSArray.class]) return sources;
-    NSIndexSet *keep = [sources indexesOfObjectsPassingTest:^BOOL(id s, NSUInteger i, BOOL *stop) { return !PLXIsPlexOnlineSource(s); }];
-    return keep.count == sources.count ? sources : [sources objectsAtIndexes:keep];
+    return PLXFiltered(((id (*)(id, SEL))PLXOrigPinnedSources)(self, _cmd), NO);
+}
+
+static id PLXAllSources(id self, SEL _cmd) {
+    PLXSourceManager = self;
+    return PLXFiltered(((id (*)(id, SEL))PLXOrigAllSources)(self, _cmd), NO);
+}
+
+// The Live TV guide's sources: a server's DVR and Plex's own channels.
+static id PLXGuideSources(id self, SEL _cmd) {
+    return PLXFiltered(((id (*)(id, SEL))PLXOrigGuideSources)(self, _cmd), YES);
+}
+
+// Plex opens the guide on its own channels; with those hidden, on the first remaining source.
+static id PLXMainGuideSource(id self, SEL _cmd) {
+    id source = ((id (*)(id, SEL))PLXOrigMainGuideSource)(self, _cmd);
+    if (!PLXIsHidden(source)) return source;
+    id remaining = PLXFiltered(((id (*)(id, SEL))PLXOrigGuideSources)(self, NSSelectorFromString(@"hybridGuideSources")), YES);
+    return [remaining isKindOfClass:NSArray.class] ? [remaining firstObject] : nil;
+}
+
+// The More page lists every source grouped by server (sourcesByServer: one
+// array per server), built from the server objects rather than the source
+// lists above. Each server's array is filtered as Plex stores it, before the
+// page counts its rows; Plex's own Live TV row goes too, since the side menu
+// keeps its own way into Live TV.
+static IMP PLXOrigSetSourcesByServer;
+
+static void PLXSetSourcesByServer(id self, SEL _cmd, NSArray *byServer) {
+    if ([byServer isKindOfClass:NSArray.class]) {
+        NSMutableArray *filtered = [NSMutableArray arrayWithCapacity:byServer.count];
+        for (id sources in byServer) [filtered addObject:PLXFiltered(sources, YES)];
+        byServer = filtered;
+    }
+    ((void (*)(id, SEL, id))PLXOrigSetSourcesByServer)(self, _cmd, byServer);
+}
+
+// Plex also has its own switch for leaving its channels out of Live TV
+// (PMSourceManager.isLiveTVCloudProviderDisabled), but with it on Plex removes
+// the whole Live TV entry, server channels included.
+
+static void PLXReplace(Class cls, NSString *name, IMP replacement, IMP *original) {
+    Method m = class_getInstanceMethod(cls, NSSelectorFromString(name));
+    if (m) *original = method_setImplementation(m, replacement);
+}
+
+static NSArray<NSNumber *> *PLXHideValues(void) {
+    return @[@(PLXSettingBool(PLXSettingHideMoviesAndShows)), @(PLXSettingBool(PLXSettingHideRentals)),
+             @(PLXSettingBool(PLXSettingHideDiscover)), @(PLXSettingBool(PLXSettingHidePlexLiveTV))];
 }
 
 __attribute__((constructor)) static void PLXInstallHideOnline(void) {
-    Class c = NSClassFromString(@"PMSourceManager");
-    Method m = c ? class_getInstanceMethod(c, @selector(pinnedSources)) : NULL;
-    if (!m) return;
-    PLXOrigPinnedSources = method_setImplementation(m, (IMP)PLXPinnedSources);
-    // Plex rebuilds the side menu and Home when its source manager reports a
-    // change. Only this setting needs that reload, so other settings don't trigger it.
-    __block BOOL hidden = PLXSettingBool(PLXSettingHideOnlineContent);
+    Class manager = NSClassFromString(@"PMSourceManager");
+    if (!manager) return;
+    PLXReplace(manager, @"pinnedSources", (IMP)PLXPinnedSources, &PLXOrigPinnedSources);
+    PLXReplace(manager, @"allSources", (IMP)PLXAllSources, &PLXOrigAllSources);
+    PLXReplace(manager, @"hybridGuideSources", (IMP)PLXGuideSources, &PLXOrigGuideSources);
+    PLXReplace(manager, @"mainGuideSource", (IMP)PLXMainGuideSource, &PLXOrigMainGuideSource);
+    Class more = NSClassFromString(@"PMMoreSourcesListViewModel");
+    if (more) PLXReplace(more, @"setSourcesByServer:", (IMP)PLXSetSourcesByServer, &PLXOrigSetSourcesByServer);
+
+    // Plex rebuilds the side menu, More page and Home when its source manager
+    // reports a change. Only these settings need that reload.
+    __block NSArray *last = PLXHideValues();
     [NSNotificationCenter.defaultCenter addObserverForName:PLXSettingsDidChangeNotification object:nil queue:NSOperationQueue.mainQueue
         usingBlock:^(NSNotification *note) {
-            if (PLXSettingBool(PLXSettingHideOnlineContent) == hidden) return;
-            hidden = !hidden;
-            id manager = PLXSourceManager;
-            if ([manager respondsToSelector:@selector(notifyUpdate)]) [manager performSelector:@selector(notifyUpdate)];
+            NSArray *now = PLXHideValues();
+            if ([now isEqualToArray:last]) return;
+            last = now;
+            id sourceManager = PLXSourceManager;
+            SEL notify = NSSelectorFromString(@"notifyUpdate");
+            if ([sourceManager respondsToSelector:notify]) ((void (*)(id, SEL))objc_msgSend)(sourceManager, notify);
         }];
 }

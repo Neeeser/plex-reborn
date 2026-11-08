@@ -10,7 +10,11 @@ extern NSString *const PLXSettingBarButtonsInVerticalBar; // BOOL, default YES
 extern NSString *const PLXSettingClearTitleBar;     // BOOL, default YES
 extern NSString *const PLXSettingDeskReflection;    // BOOL, default YES
 extern NSString *const PLXSettingLibraryTabs;       // PLXLibraryTabsPlacement, default button
-extern NSString *const PLXSettingHideOnlineContent; // BOOL, default NO
+// Plex's online content, hidden per kind. Each defaults to version 0.1.0's single switch.
+extern NSString *const PLXSettingHideMoviesAndShows; // BOOL
+extern NSString *const PLXSettingHideRentals;        // BOOL
+extern NSString *const PLXSettingHideDiscover;       // BOOL
+extern NSString *const PLXSettingHidePlexLiveTV;     // BOOL
 extern NSString *const PLXSettingsDidChangeNotification;
 
 // Where a library's own tabs (Recommended, Library, Categories) go while the

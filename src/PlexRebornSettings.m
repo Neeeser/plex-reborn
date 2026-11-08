@@ -19,10 +19,21 @@ NSString *const PLXSettingBarButtonsInVerticalBar = @"PlexReborn.barButtonsInVer
 NSString *const PLXSettingClearTitleBar = @"PlexReborn.clearTitleBar";
 NSString *const PLXSettingDeskReflection = @"PlexReborn.deskReflection";
 NSString *const PLXSettingLibraryTabs = @"PlexReborn.libraryTabs";
-NSString *const PLXSettingHideOnlineContent = @"PlexReborn.hideOnlineContent";
+NSString *const PLXSettingHideMoviesAndShows = @"PlexReborn.hideMoviesAndShows";
+NSString *const PLXSettingHideRentals = @"PlexReborn.hideRentals";
+NSString *const PLXSettingHideDiscover = @"PlexReborn.hideDiscover";
+NSString *const PLXSettingHidePlexLiveTV = @"PlexReborn.hidePlexLiveTV";
 NSString *const PLXSettingsDidChangeNotification = @"PlexRebornSettingsDidChange";
 
+// Version 0.1.0 had one switch for all of Plex's online content; its value is
+// the default for each of the separate switches that replaced it.
+static NSString *const PLXLegacyHideOnlineContent = @"PlexReborn.hideOnlineContent";
+
 static const NSUInteger PLXMaxTabs = 5;
+
+static NSArray<NSString *> *PLXHideOnlineKeys(void) {
+    return @[PLXSettingHideMoviesAndShows, PLXSettingHideRentals, PLXSettingHideDiscover, PLXSettingHidePlexLiveTV];
+}
 
 BOOL PLXSettingBool(NSString *key) {
     static NSDictionary<NSString *, NSNumber *> *defaults;
@@ -31,6 +42,7 @@ BOOL PLXSettingBool(NSString *key) {
         defaults = @{ PLXSettingCustomTabBar: @NO, PLXSettingRowsUnderBar: @YES, PLXSettingBarButtonsInVerticalBar: @YES, PLXSettingClearTitleBar: @YES, PLXSettingDeskReflection: @YES };
     });
     id value = [NSUserDefaults.standardUserDefaults objectForKey:key];
+    if (!value && [PLXHideOnlineKeys() containsObject:key]) value = [NSUserDefaults.standardUserDefaults objectForKey:PLXLegacyHideOnlineContent];
     return value ? [value boolValue] : defaults[key].boolValue;
 }
 
@@ -47,24 +59,173 @@ static void PLXSetSetting(NSString *key, id value) {
 @implementation PLXTabEntry
 @end
 
-#pragma mark - Settings screen
+#pragma mark - Settings pages
+//
+// The Plex Reborn page lists one row per settings page, like iOS Settings.
+// Pages other than Tabs are forms: sections of switch, choice and link rows.
 
-typedef NS_ENUM(NSInteger, PLXSection) {
-    PLXSectionTabBarSwitch,
-    PLXSectionChosenTabs,
-    PLXSectionAvailableTabs,
-    PLXSectionContent,
-    PLXSectionLayout,
-    PLXSectionAbout,
-    PLXSectionCount,
+@interface PLXRow : NSObject
+@property (nonatomic, copy) NSString *title;
+@property (nonatomic, copy) NSString *symbol;          // link rows: SF Symbol on a colored tile
+@property (nonatomic, strong) UIColor *tileColor;
+@property (nonatomic, copy) UIViewController *(^page)(void); // link rows
+@property (nonatomic, copy) NSString *key;             // switch and choice rows
+@property (nonatomic, copy) NSArray<NSString *> *options; // choice rows
+@property (nonatomic, copy) BOOL (^isOn)(void);        // switch rows with their own value
+@property (nonatomic, copy) void (^setOn)(BOOL on);
+@end
+@implementation PLXRow
++ (instancetype)link:(NSString *)title symbol:(NSString *)symbol color:(UIColor *)color page:(UIViewController *(^)(void))page {
+    PLXRow *row = [self new]; row.title = title; row.symbol = symbol; row.tileColor = color; row.page = page; return row;
+}
++ (instancetype)toggle:(NSString *)title key:(NSString *)key {
+    PLXRow *row = [self new]; row.title = title; row.key = key; return row;
+}
++ (instancetype)choice:(NSString *)title key:(NSString *)key options:(NSArray<NSString *> *)options {
+    PLXRow *row = [self new]; row.title = title; row.key = key; row.options = options; return row;
+}
+@end
+
+@interface PLXSection : NSObject
+@property (nonatomic, copy) NSString *header, *footer;
+@property (nonatomic, copy) NSArray<PLXRow *> *rows;
+@end
+@implementation PLXSection
++ (instancetype)header:(NSString *)header rows:(NSArray<PLXRow *> *)rows footer:(NSString *)footer {
+    PLXSection *s = [self new]; s.header = header; s.rows = rows; s.footer = footer; return s;
+}
+@end
+
+static UITableViewCell *PLXSwitchCell(NSString *title, BOOL on, id target, SEL action, NSInteger tag) {
+    UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:nil];
+    cell.textLabel.text = title;
+    cell.textLabel.numberOfLines = 0;
+    cell.selectionStyle = UITableViewCellSelectionStyleNone;
+    UISwitch *toggle = [UISwitch new];
+    toggle.on = on;
+    toggle.tag = tag;
+    [toggle addTarget:target action:action forControlEvents:UIControlEventValueChanged];
+    cell.accessoryView = toggle;
+    return cell;
+}
+
+// A row whose value is picked from a pop-up menu; the stored value is the option's index.
+static UITableViewCell *PLXChoiceCell(NSString *title, NSString *key, NSArray<NSString *> *options) {
+    UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:nil];
+    cell.textLabel.text = title;
+    cell.selectionStyle = UITableViewCellSelectionStyleNone;
+    NSInteger current = PLXSettingInteger(key);
+    NSMutableArray<UIAction *> *actions = [NSMutableArray array];
+    [options enumerateObjectsUsingBlock:^(NSString *option, NSUInteger i, BOOL *stop) {
+        UIAction *action = [UIAction actionWithTitle:option image:nil identifier:nil handler:^(UIAction *a) { PLXSetSetting(key, @(i)); }];
+        action.state = (NSInteger)i == current ? UIMenuElementStateOn : UIMenuElementStateOff;
+        [actions addObject:action];
+    }];
+    UIButtonConfiguration *config = [UIButtonConfiguration plainButtonConfiguration];
+    config.indicator = UIButtonConfigurationIndicatorPopup;
+    UIButton *button = [UIButton buttonWithConfiguration:config primaryAction:nil];
+    button.menu = [UIMenu menuWithChildren:actions];
+    button.showsMenuAsPrimaryAction = YES;
+    button.changesSelectionAsPrimaryAction = YES;
+    [button sizeToFit];
+    cell.accessoryView = button;
+    return cell;
+}
+
+// An SF Symbol in white on a rounded colored square, like iOS Settings.
+static UIImage *PLXTileImage(NSString *symbol, UIColor *color) {
+    CGFloat side = 29;
+    UIImage *glyph = [[UIImage systemImageNamed:symbol withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:15 weight:UIImageSymbolWeightSemibold]]
+        imageWithTintColor:UIColor.whiteColor renderingMode:UIImageRenderingModeAlwaysOriginal];
+    return [[[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(side, side)] imageWithActions:^(UIGraphicsImageRendererContext *ctx) {
+        [color setFill];
+        [[UIBezierPath bezierPathWithRoundedRect:CGRectMake(0, 0, side, side) cornerRadius:7] fill];
+        CGSize g = glyph.size;
+        [glyph drawInRect:CGRectMake((side - g.width) / 2, (side - g.height) / 2, g.width, g.height)];
+    }];
+}
+
+@interface PLXFormViewController : UITableViewController
+@property (nonatomic, copy) NSArray<PLXSection *> *(^build)(void);
+@property (nonatomic, copy) NSArray<PLXSection *> *sections;
+@end
+
+@implementation PLXFormViewController
+
+- (instancetype)initWithTitle:(NSString *)title build:(NSArray<PLXSection *> *(^)(void))build {
+    if ((self = [super initWithStyle:UITableViewStyleInsetGrouped])) { self.title = title; _build = [build copy]; }
+    return self;
+}
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    [self reload];
+}
+
+- (void)reload {
+    self.sections = self.build();
+    [self.tableView reloadData];
+}
+
+- (PLXRow *)rowAt:(NSIndexPath *)indexPath { return self.sections[indexPath.section].rows[indexPath.row]; }
+
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { return self.sections.count; }
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section { return self.sections[section].rows.count; }
+- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section { return self.sections[section].header; }
+- (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section { return self.sections[section].footer; }
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    PLXRow *row = [self rowAt:indexPath];
+    if (row.page) {
+        UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:nil];
+        cell.textLabel.text = row.title;
+        cell.imageView.image = PLXTileImage(row.symbol, row.tileColor);
+        cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+        return cell;
+    }
+    if (row.options) return PLXChoiceCell(row.title, row.key, row.options);
+    BOOL on = row.isOn ? row.isOn() : PLXSettingBool(row.key);
+    NSInteger tag = indexPath.section * 1000 + indexPath.row;
+    return PLXSwitchCell(row.title, on, self, @selector(toggled:), tag);
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    PLXRow *row = [self rowAt:indexPath];
+    if (row.page) [self.navigationController pushViewController:row.page() animated:YES];
+}
+
+- (void)toggled:(UISwitch *)sender {
+    PLXRow *row = self.sections[sender.tag / 1000].rows[sender.tag % 1000];
+    if (row.setOn) row.setOn(sender.on);
+    else PLXSetSetting(row.key, @(sender.on));
+    // Rows can depend on each other ("Hide all"), so redraw the page.
+    dispatch_async(dispatch_get_main_queue(), ^{ [self reload]; });
+}
+
+@end
+
+#pragma mark Tabs page
+
+typedef NS_ENUM(NSInteger, PLXTabsSection) {
+    PLXTabsSectionSwitch,
+    PLXTabsSectionChosen,
+    PLXTabsSectionAvailable,
+    PLXTabsSectionLibrary,
+    PLXTabsSectionCount,
 };
 
-@interface PLXSettingsViewController : UITableViewController
+@interface PLXTabsSettingsViewController : UITableViewController
 @property (nonatomic, strong) NSArray<PLXTabEntry *> *available;
 @property (nonatomic, strong) NSMutableArray<NSString *> *chosen;
 @end
 
-@implementation PLXSettingsViewController
+@implementation PLXTabsSettingsViewController
 
 - (instancetype)init {
     return [super initWithStyle:UITableViewStyleInsetGrouped];
@@ -72,7 +233,7 @@ typedef NS_ENUM(NSInteger, PLXSection) {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = @"Plex Reborn";
+    self.title = @"Tabs";
     self.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
     self.tableView.allowsSelectionDuringEditing = YES;
     [self reloadModel];
@@ -118,83 +279,39 @@ typedef NS_ENUM(NSInteger, PLXSection) {
 
 - (BOOL)custom { return PLXSettingBool(PLXSettingCustomTabBar); }
 
-#pragma mark Table data
-
-- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { return PLXSectionCount; }
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { return PLXTabsSectionCount; }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     switch (section) {
-        case PLXSectionTabBarSwitch: return 1;
-        case PLXSectionChosenTabs: return self.custom ? self.chosen.count : 0;
-        case PLXSectionAvailableTabs: return self.custom ? self.unchosen.count : 0;
-        case PLXSectionContent: return 1;
-        case PLXSectionLayout: return 6;
-        case PLXSectionAbout: return 1;
+        case PLXTabsSectionSwitch: return 1;
+        case PLXTabsSectionChosen: return self.custom ? self.chosen.count : 0;
+        case PLXTabsSectionAvailable: return self.custom ? self.unchosen.count : 0;
+        case PLXTabsSectionLibrary: return 1;
     }
     return 0;
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
     switch (section) {
-        case PLXSectionTabBarSwitch: return @"Tab bar";
-        case PLXSectionChosenTabs: return self.custom ? [NSString stringWithFormat:@"Your tabs (up to %lu)", (unsigned long)PLXMaxTabs] : nil;
-        case PLXSectionAvailableTabs: return self.custom ? @"Add a tab" : nil;
-        case PLXSectionContent: return @"Content";
-        case PLXSectionLayout: return @"Layout";
-        case PLXSectionAbout: return @"About";
+        case PLXTabsSectionChosen: return self.custom ? [NSString stringWithFormat:@"Your tabs (up to %lu)", (unsigned long)PLXMaxTabs] : nil;
+        case PLXTabsSectionAvailable: return self.custom ? @"Add a tab" : nil;
+        case PLXTabsSectionLibrary: return @"Libraries";
     }
     return nil;
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     switch (section) {
-        case PLXSectionTabBarSwitch:
+        case PLXTabsSectionSwitch:
             return self.custom
                 ? @"These tabs replace Plex's tabs at the bottom, or in the vertical bar on iPhone Duo. Side menu entries open the same screen as in the side menu."
                 : @"Off: the tab bar shows the tabs of the current screen.";
-        case PLXSectionAvailableTabs:
+        case PLXTabsSectionAvailable:
             return self.custom ? @"Side menu entries appear here once the side menu has loaded." : nil;
-        case PLXSectionContent:
-            return @"Removes Plex's Movies & Shows, Rentals and Discover from the side menu and Home. Your libraries, Watchlist and Live TV stay.";
-        case PLXSectionLayout:
-            return @"Applies when the iPhone Duo's vertical bar is showing. Library tabs are a library's Recommended, Library and Categories: as one button with a menu, as tabs in the vertical bar in place of your tabs, or as Plex's bar along the bottom.";
+        case PLXTabsSectionLibrary:
+            return @"A library's Recommended, Library and Categories: as one button with a menu, as tabs in the iPhone Duo's vertical bar in place of your tabs, or as Plex's bar along the bottom. Each library opens on the tab you last picked.";
     }
     return nil;
-}
-
-- (UITableViewCell *)switchCellTitled:(NSString *)title on:(BOOL)on action:(SEL)action {
-    UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:nil];
-    cell.textLabel.text = title;
-    cell.textLabel.numberOfLines = 0;
-    cell.selectionStyle = UITableViewCellSelectionStyleNone;
-    UISwitch *toggle = [UISwitch new];
-    toggle.on = on;
-    [toggle addTarget:self action:action forControlEvents:UIControlEventValueChanged];
-    cell.accessoryView = toggle;
-    return cell;
-}
-
-// A row whose value is picked from a pop-up menu; the stored value is the option's index.
-- (UITableViewCell *)choiceCellTitled:(NSString *)title key:(NSString *)key options:(NSArray<NSString *> *)options {
-    UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:nil];
-    cell.textLabel.text = title;
-    cell.selectionStyle = UITableViewCellSelectionStyleNone;
-    NSInteger current = PLXSettingInteger(key);
-    NSMutableArray<UIAction *> *actions = [NSMutableArray array];
-    [options enumerateObjectsUsingBlock:^(NSString *option, NSUInteger i, BOOL *stop) {
-        UIAction *action = [UIAction actionWithTitle:option image:nil identifier:nil handler:^(UIAction *a) { PLXSetSetting(key, @(i)); }];
-        action.state = (NSInteger)i == current ? UIMenuElementStateOn : UIMenuElementStateOff;
-        [actions addObject:action];
-    }];
-    UIButtonConfiguration *config = [UIButtonConfiguration plainButtonConfiguration];
-    config.indicator = UIButtonConfigurationIndicatorPopup;
-    UIButton *button = [UIButton buttonWithConfiguration:config primaryAction:nil];
-    button.menu = [UIMenu menuWithChildren:actions];
-    button.showsMenuAsPrimaryAction = YES;
-    button.changesSelectionAsPrimaryAction = YES;
-    [button sizeToFit];
-    cell.accessoryView = button;
-    return cell;
 }
 
 - (UITableViewCell *)tabCellForEntry:(PLXTabEntry *)entry {
@@ -209,43 +326,25 @@ typedef NS_ENUM(NSInteger, PLXSection) {
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     switch (indexPath.section) {
-        case PLXSectionTabBarSwitch:
-            return [self switchCellTitled:@"Choose my own tabs" on:self.custom action:@selector(toggleCustom:)];
-        case PLXSectionChosenTabs:
+        case PLXTabsSectionSwitch:
+            return PLXSwitchCell(@"Choose my own tabs", self.custom, self, @selector(toggleCustom:), 0);
+        case PLXTabsSectionChosen:
             return [self tabCellForEntry:[self entryWithID:self.chosen[indexPath.row]]];
-        case PLXSectionAvailableTabs:
+        case PLXTabsSectionAvailable:
             return [self tabCellForEntry:self.unchosen[indexPath.row]];
-        case PLXSectionContent:
-            return [self switchCellTitled:@"Hide Plex's online content" on:PLXSettingBool(PLXSettingHideOnlineContent) action:@selector(toggleHideOnline:)];
-        case PLXSectionLayout:
-            if (indexPath.row == 0) return [self switchCellTitled:@"Top bar buttons in the vertical bar" on:PLXSettingBool(PLXSettingBarButtonsInVerticalBar) action:@selector(toggleBarButtons:)];
-            if (indexPath.row == 1) return [self switchCellTitled:@"Clear title bar that hides while scrolling" on:PLXSettingBool(PLXSettingClearTitleBar) action:@selector(toggleClearTitleBar:)];
-            if (indexPath.row == 2) return [self choiceCellTitled:@"Library tabs" key:PLXSettingLibraryTabs
-                options:@[@"Menu button", @"Vertical bar tabs", @"Plex's bottom bar"]];
-            if (indexPath.row == 3) return [self switchCellTitled:@"Posters scroll under the vertical bar" on:PLXSettingBool(PLXSettingRowsUnderBar) action:@selector(toggleRowsUnderBar:)];
-            if (indexPath.row == 5) return [self switchCellTitled:@"Reflect the video below the fold in desk posture" on:PLXSettingBool(PLXSettingDeskReflection) action:@selector(toggleDeskReflection:)];
-            return [self choiceCellTitled:@"Mini player" key:PLXSettingMiniPlayerStyle
-                options:@[@"Floating card", @"Full-width bar", @"Plex's bar"]];
-        case PLXSectionAbout: {
-            UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:nil];
-            cell.textLabel.text = @"Version";
-            cell.detailTextLabel.text = @PLX_VERSION;
-            cell.selectionStyle = UITableViewCellSelectionStyleNone;
-            return cell;
-        }
+        case PLXTabsSectionLibrary:
+            return PLXChoiceCell(@"Library tabs", PLXSettingLibraryTabs, @[@"Menu button", @"Vertical bar tabs", @"Plex's bottom bar"]);
     }
     return [UITableViewCell new];
 }
 
-#pragma mark Editing
-
 - (BOOL)tableView:(UITableView *)tableView canEditRowAtIndexPath:(NSIndexPath *)indexPath {
-    return indexPath.section == PLXSectionChosenTabs || indexPath.section == PLXSectionAvailableTabs;
+    return indexPath.section == PLXTabsSectionChosen || indexPath.section == PLXTabsSectionAvailable;
 }
 
 - (UITableViewCellEditingStyle)tableView:(UITableView *)tableView editingStyleForRowAtIndexPath:(NSIndexPath *)indexPath {
-    if (indexPath.section == PLXSectionChosenTabs) return UITableViewCellEditingStyleDelete;
-    if (indexPath.section == PLXSectionAvailableTabs) return UITableViewCellEditingStyleInsert;
+    if (indexPath.section == PLXTabsSectionChosen) return UITableViewCellEditingStyleDelete;
+    if (indexPath.section == PLXTabsSectionAvailable) return UITableViewCellEditingStyleInsert;
     return UITableViewCellEditingStyleNone;
 }
 
@@ -254,10 +353,10 @@ typedef NS_ENUM(NSInteger, PLXSection) {
 }
 
 - (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)style forRowAtIndexPath:(NSIndexPath *)indexPath {
-    if (style == UITableViewCellEditingStyleDelete && indexPath.section == PLXSectionChosenTabs) {
+    if (style == UITableViewCellEditingStyleDelete && indexPath.section == PLXTabsSectionChosen) {
         if (self.chosen.count <= 1) return; // keep at least one tab
         [self.chosen removeObjectAtIndex:indexPath.row];
-    } else if (style == UITableViewCellEditingStyleInsert && indexPath.section == PLXSectionAvailableTabs) {
+    } else if (style == UITableViewCellEditingStyleInsert && indexPath.section == PLXTabsSectionAvailable) {
         if (self.chosen.count >= PLXMaxTabs) return;
         [self.chosen addObject:self.unchosen[indexPath.row].identifier];
     }
@@ -267,18 +366,18 @@ typedef NS_ENUM(NSInteger, PLXSection) {
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    if (indexPath.section == PLXSectionAvailableTabs) {
+    if (indexPath.section == PLXTabsSectionAvailable) {
         [self tableView:tableView commitEditingStyle:UITableViewCellEditingStyleInsert forRowAtIndexPath:indexPath];
     }
 }
 
 - (BOOL)tableView:(UITableView *)tableView canMoveRowAtIndexPath:(NSIndexPath *)indexPath {
-    return indexPath.section == PLXSectionChosenTabs;
+    return indexPath.section == PLXTabsSectionChosen;
 }
 
 - (NSIndexPath *)tableView:(UITableView *)tableView targetIndexPathForMoveFromRowAtIndexPath:(NSIndexPath *)from toProposedIndexPath:(NSIndexPath *)to {
-    if (to.section < PLXSectionChosenTabs) return [NSIndexPath indexPathForRow:0 inSection:PLXSectionChosenTabs];
-    if (to.section > PLXSectionChosenTabs) return [NSIndexPath indexPathForRow:self.chosen.count - 1 inSection:PLXSectionChosenTabs];
+    if (to.section < PLXTabsSectionChosen) return [NSIndexPath indexPathForRow:0 inSection:PLXTabsSectionChosen];
+    if (to.section > PLXTabsSectionChosen) return [NSIndexPath indexPathForRow:self.chosen.count - 1 inSection:PLXTabsSectionChosen];
     return to;
 }
 
@@ -289,8 +388,6 @@ typedef NS_ENUM(NSInteger, PLXSection) {
     [self saveChosen];
 }
 
-#pragma mark Switches
-
 - (void)toggleCustom:(UISwitch *)sender {
     if (sender.on && ![NSUserDefaults.standardUserDefaults arrayForKey:PLXSettingTabBarItems]) [self saveChosen];
     PLXSetSetting(PLXSettingCustomTabBar, @(sender.on));
@@ -298,13 +395,72 @@ typedef NS_ENUM(NSInteger, PLXSection) {
     [self.tableView reloadData];
 }
 
-- (void)toggleRowsUnderBar:(UISwitch *)sender { PLXSetSetting(PLXSettingRowsUnderBar, @(sender.on)); }
-- (void)toggleDeskReflection:(UISwitch *)sender { PLXSetSetting(PLXSettingDeskReflection, @(sender.on)); }
-- (void)toggleClearTitleBar:(UISwitch *)sender { PLXSetSetting(PLXSettingClearTitleBar, @(sender.on)); }
-- (void)toggleBarButtons:(UISwitch *)sender { PLXSetSetting(PLXSettingBarButtonsInVerticalBar, @(sender.on)); }
-- (void)toggleHideOnline:(UISwitch *)sender { PLXSetSetting(PLXSettingHideOnlineContent, @(sender.on)); }
-
 @end
+
+#pragma mark Pages
+
+static UIViewController *PLXOnlineContentPage(void) {
+    return [[PLXFormViewController alloc] initWithTitle:@"Plex Online Content" build:^NSArray<PLXSection *> *{
+        PLXRow *all = [PLXRow toggle:@"Hide all of Plex's online content" key:nil];
+        all.isOn = ^BOOL {
+            for (NSString *key in PLXHideOnlineKeys()) if (!PLXSettingBool(key)) return NO;
+            return YES;
+        };
+        all.setOn = ^(BOOL on) {
+            for (NSString *key in PLXHideOnlineKeys()) [NSUserDefaults.standardUserDefaults setObject:@(on) forKey:key];
+            [NSNotificationCenter.defaultCenter postNotificationName:PLXSettingsDidChangeNotification object:nil];
+        };
+        return @[
+            [PLXSection header:nil rows:@[all] footer:@"Shows only your own libraries, the libraries shared with you, your Watchlist and your server's Live TV."],
+            [PLXSection header:@"Hide" rows:@[
+                [PLXRow toggle:@"Movies & Shows" key:PLXSettingHideMoviesAndShows],
+                [PLXRow toggle:@"Rentals" key:PLXSettingHideRentals],
+                [PLXRow toggle:@"Discover" key:PLXSettingHideDiscover],
+                [PLXRow toggle:@"Live TV channels from Plex" key:PLXSettingHidePlexLiveTV],
+            ] footer:@"Hidden content leaves the side menu, the More page and Home. Hiding Plex's Live TV channels leaves only your server's channels in the guide."],
+        ];
+    }];
+}
+
+static UIViewController *PLXInterfacePage(void) {
+    return [[PLXFormViewController alloc] initWithTitle:@"Interface" build:^NSArray<PLXSection *> *{
+        return @[
+            [PLXSection header:@"Bars" rows:@[
+                [PLXRow toggle:@"Clear title bar that hides while scrolling" key:PLXSettingClearTitleBar],
+                [PLXRow toggle:@"Top bar buttons in the vertical bar" key:PLXSettingBarButtonsInVerticalBar],
+            ] footer:@"The clear title bar also leaves the title off the first screen of each tab, so content starts at the top. Both apply while the iPhone Duo's vertical bar shows."],
+            [PLXSection header:@"Mini Player" rows:@[
+                [PLXRow choice:@"Style" key:PLXSettingMiniPlayerStyle options:@[@"Floating card", @"Full-width bar", @"Plex's bar"]],
+            ] footer:@"The floating card and full-width bar apply beside the iPhone Duo's vertical bar."],
+            [PLXSection header:@"Posters" rows:@[
+                [PLXRow toggle:@"Posters scroll under the vertical bar" key:PLXSettingRowsUnderBar],
+            ] footer:@"Poster rows and the Live TV guide run to the screen edge under the iPhone Duo's vertical bar."],
+        ];
+    }];
+}
+
+static UIViewController *PLXPlayerPage(void) {
+    return [[PLXFormViewController alloc] initWithTitle:@"Player" build:^NSArray<PLXSection *> *{
+        return @[
+            [PLXSection header:@"Desk Posture" rows:@[
+                [PLXRow toggle:@"Reflect the video below the fold" key:PLXSettingDeskReflection],
+            ] footer:@"With an iPhone Duo half open like a laptop, video plays on the top half and the controls sit on the bottom half over a reflection of the video."],
+        ];
+    }];
+}
+
+static UIViewController *PLXRootPage(void) {
+    return [[PLXFormViewController alloc] initWithTitle:@"Plex Reborn" build:^NSArray<PLXSection *> *{
+        return @[
+            [PLXSection header:@"Features" rows:@[
+                [PLXRow link:@"Tabs" symbol:@"square.grid.2x2.fill" color:UIColor.systemOrangeColor page:^UIViewController *{ return [PLXTabsSettingsViewController new]; }],
+                [PLXRow link:@"Plex Online Content" symbol:@"globe" color:UIColor.systemBlueColor page:^{ return PLXOnlineContentPage(); }],
+                [PLXRow link:@"Interface" symbol:@"rectangle.3.group.fill" color:UIColor.systemPurpleColor page:^{ return PLXInterfacePage(); }],
+                [PLXRow link:@"Player" symbol:@"play.rectangle.fill" color:UIColor.systemRedColor page:^{ return PLXPlayerPage(); }],
+            ] footer:[NSString stringWithFormat:@"Plex Reborn %s", PLX_VERSION]],
+        ];
+    }];
+}
 
 #pragma mark - Entry in Plex's Settings
 
@@ -363,7 +519,7 @@ typedef NS_ENUM(NSInteger, PLXSection) {
 
 - (void)open {
     UIViewController *owner = self.owner;
-    PLXSettingsViewController *settings = [PLXSettingsViewController new];
+    UIViewController *settings = PLXRootPage();
     if (owner.navigationController) [owner.navigationController pushViewController:settings animated:YES];
     else [owner presentViewController:[[UINavigationController alloc] initWithRootViewController:settings] animated:YES completion:nil];
 }
