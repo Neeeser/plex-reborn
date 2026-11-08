@@ -28,6 +28,19 @@ static void PLXDumpView(UIView *view, NSUInteger depth, NSMutableString *out) {
         view.hidden ? @" hidden" : @"",
         ([view isKindOfClass:UINavigationBar.class] ? [[[(UINavigationBar *)view topItem].rightBarButtonItems valueForKey:@"debugDescriptionForDump"] componentsJoinedByString:@" | "] : @""),
         view.layer.sublayers.count ? [NSString stringWithFormat:@" layers=%@", [[view.layer.sublayers valueForKey:@"class"] componentsJoinedByString:@","]] : @""];
+    if (!UIEdgeInsetsEqualToEdgeInsets(view.safeAreaInsets, UIEdgeInsetsZero)) {
+        [out appendFormat:@"  ↳ safeArea %@\n", NSStringFromUIEdgeInsets(view.safeAreaInsets)];
+    }
+    if ([view.nextResponder isKindOfClass:UIViewController.class]) {
+        UIViewController *vc = (UIViewController *)view.nextResponder;
+        [out appendFormat:@"  ↳ controller %@ additionalSafeArea=%@ edges=%lu extendOpaque=%d\n", NSStringFromClass(vc.class),
+            NSStringFromUIEdgeInsets(vc.additionalSafeAreaInsets), (unsigned long)vc.edgesForExtendedLayout, vc.extendedLayoutIncludesOpaqueBars];
+    }
+    if ([view isKindOfClass:UINavigationBar.class]) {
+        UINavigationBar *bar = (UINavigationBar *)view;
+        [out appendFormat:@"  ↳ navbar translucent=%d prefersLarge=%d standardBg=%@ scrollEdge=%@ barTint=%@\n", bar.translucent, bar.prefersLargeTitles,
+            bar.standardAppearance.backgroundColor, bar.scrollEdgeAppearance ? @"set" : @"nil", bar.barTintColor];
+    }
     if ([NSStringFromClass(view.class) isEqualToString:@"PMTopPlayerControlsView"]) {
         [out appendFormat:@"  ↳ topConstraint %@ autoresizing=%d\n", PLXTopEdgeConstraint(view, view.superview), view.translatesAutoresizingMaskIntoConstraints];
     }
