@@ -35,5 +35,5 @@ build_shim() {
   xcrun -sdk $sdk clang -arch arm64 -dynamiclib -fobjc-arc -fmodules $minflag \
     -framework UIKit -framework Foundation -framework Security \
     -install_name "@executable_path/Frameworks/$SHIM_NAME" \
-    -Wall -Wno-unguarded-availability-new -o "$out" "${sources[@]}"
+    -Wall -Wno-unguarded-availability-new -DPLX_VERSION="\"$(<"$PROJ/VERSION")\"" -o "$out" "${sources[@]}"
 }

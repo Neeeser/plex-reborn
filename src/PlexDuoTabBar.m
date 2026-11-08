@@ -18,6 +18,7 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 #import <objc/message.h>
+#import "PlexReborn.h"
 
 static const CGFloat PLXTabIconSide = 24.0;
 
@@ -55,9 +56,14 @@ static void PLXNormalizeTabImages(UITabBar *tabBar) {
 static UIView *PLXPassThroughHitTest(UIView *self, SEL _cmd, CGPoint point, UIEvent *event) {
     struct objc_super parent = { self, class_getSuperclass(object_getClass(self)) };
     UIView *hit = ((UIView *(*)(struct objc_super *, SEL, CGPoint, UIEvent *))objc_msgSendSuper)(&parent, _cmd, point, event);
+    // Only the tab bar's own buttons and platter count. The full-screen
+    // floating bar container around them must pass touches through, or it
+    // swallows taps on other vertical bar buttons hosted underneath.
     for (UIView *v = hit; v && v != self; v = v.superview) {
         NSString *name = NSStringFromClass(v.class);
-        if ([v isKindOfClass:UITabBar.class] || [name containsString:@"TabBar"] || [name containsString:@"FloatingBar"] || [name containsString:@"TabButton"]) return hit;
+        if ([name containsString:@"FloatingBarContainer"] || [name containsString:@"FloatingBarHosting"]) return nil;
+        if ([name containsString:@"TabButton"] || [name containsString:@"TabBarItemPlatter"] ||
+            [name containsString:@"TabBarExpansion"] || [v isKindOfClass:UITabBar.class]) return hit;
     }
     return nil;
 }
@@ -149,11 +155,247 @@ static BOOL PLXPlexBarShowing(UITabBar *tabBar) {
     return YES;
 }
 
+static void PLXMakePassThrough(UIView *view);
+
+#pragma mark - Tab entries (Home tabs and side menu)
+
+// The tab bar of Plex's Home screen: the first Plex tab bar shown after launch,
+// since Plex opens on Home.
+static __weak UITabBar *PLXHomeBar;
+static NSArray<PLXTabEntry *> *PLXHomeEntries;
+
+static void PLXRememberHomeBar(UITabBar *bar) {
+    if (PLXHomeBar || bar.items.count < 3 || !bar.window) return;
+    PLXHomeBar = bar;
+    NSMutableArray *entries = [NSMutableArray array];
+    for (UITabBarItem *item in bar.items) {
+        PLXTabEntry *e = [PLXTabEntry new];
+        e.identifier = [@"home:" stringByAppendingString:item.title ?: @""];
+        e.title = item.title;
+        e.image = PLXSquareIcon(item.image);
+        [entries addObject:e];
+    }
+    PLXHomeEntries = entries;
+}
+
+static UIView *PLXFindViewOfClass(UIView *root, NSString *className) {
+    if ([NSStringFromClass(root.class) isEqualToString:className]) return root;
+    for (UIView *sub in root.subviews) { UIView *v = PLXFindViewOfClass(sub, className); if (v) return v; }
+    return nil;
+}
+
+static UIWindow *PLXMainWindow(void) {
+    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+        if (![scene isKindOfClass:UIWindowScene.class]) continue;
+        for (UIWindow *w in ((UIWindowScene *)scene).windows) if (w.isKeyWindow) return w;
+    }
+    return nil;
+}
+
+// Plex's side menu list (PMSidebar contains a table of PMSourceListItemTableViewCell).
+static UITableView *PLXSideMenuTable(void) {
+    UIView *sidebar = PLXFindViewOfClass(PLXMainWindow(), @"PMSidebar");
+    UIView *table = sidebar ? PLXFindViewOfClass(sidebar, @"PMReorderableTableView") : nil;
+    return [table isKindOfClass:UITableView.class] ? (UITableView *)table : nil;
+}
+
+static void PLXCollectLabelsAndImage(UIView *view, NSMutableArray<NSString *> *labels, UIImage **image) {
+    if (view.hidden) return;
+    if ([view isKindOfClass:UILabel.class] && ((UILabel *)view).text.length) [labels addObject:((UILabel *)view).text];
+    if ([view isKindOfClass:UIImageView.class] && ((UIImageView *)view).image && CGRectGetWidth(view.bounds) >= 18 && !*image) {
+        *image = ((UIImageView *)view).image;
+    }
+    for (UIView *sub in view.subviews) PLXCollectLabelsAndImage(sub, labels, image);
+}
+
+// One entry per side menu row, in the menu's order.
+static NSArray<PLXTabEntry *> *PLXSideMenuEntries(void) {
+    UITableView *table = PLXSideMenuTable();
+    id<UITableViewDataSource> source = table.dataSource;
+    if (!source) return @[];
+    NSMutableArray *entries = [NSMutableArray array];
+    NSInteger sections = [source respondsToSelector:@selector(numberOfSectionsInTableView:)] ? [source numberOfSectionsInTableView:table] : 1;
+    for (NSInteger s = 0; s < sections; s++) {
+        NSInteger rows = [source tableView:table numberOfRowsInSection:s];
+        for (NSInteger r = 0; r < rows; r++) {
+            UITableViewCell *cell = [source tableView:table cellForRowAtIndexPath:[NSIndexPath indexPathForRow:r inSection:s]];
+            [cell layoutIfNeeded];
+            NSMutableArray<NSString *> *labels = [NSMutableArray array];
+            UIImage *image = nil;
+            PLXCollectLabelsAndImage(cell.contentView, labels, &image);
+            if (labels.count == 0) continue;
+            PLXTabEntry *e = [PLXTabEntry new];
+            e.title = labels[0];
+            e.subtitle = labels.count > 1 ? labels[1] : nil;
+            e.identifier = [NSString stringWithFormat:@"menu:%@|%@", e.title, e.subtitle ?: @""];
+            e.image = PLXSquareIcon(image);
+            [entries addObject:e];
+        }
+    }
+    return entries;
+}
+
+static NSArray<PLXTabEntry *> *PLXCachedMenuEntries;
+
+NSArray<PLXTabEntry *> *PLXAvailableTabEntries(void) {
+    NSArray *menu = PLXSideMenuEntries();
+    if (menu.count) PLXCachedMenuEntries = menu;
+    NSMutableArray *all = [NSMutableArray arrayWithArray:PLXHomeEntries ?: @[]];
+    NSSet *homeTitles = [NSSet setWithArray:[PLXHomeEntries valueForKey:@"title"] ?: @[]];
+    for (PLXTabEntry *e in PLXCachedMenuEntries) if (![homeTitles containsObject:e.title]) [all addObject:e];
+    return all;
+}
+
+static PLXTabEntry *PLXEntryWithID(NSString *identifier) {
+    for (PLXTabEntry *e in PLXAvailableTabEntries()) if ([e.identifier isEqualToString:identifier]) return e;
+    return nil;
+}
+
+// Opens a side menu entry exactly as tapping it in the side menu does.
+static BOOL PLXOpenSideMenuEntry(NSString *identifier) {
+    UITableView *table = PLXSideMenuTable();
+    id<UITableViewDataSource> source = table.dataSource;
+    if (!source) return NO;
+    NSInteger sections = [source respondsToSelector:@selector(numberOfSectionsInTableView:)] ? [source numberOfSectionsInTableView:table] : 1;
+    for (NSInteger s = 0; s < sections; s++) {
+        NSInteger rows = [source tableView:table numberOfRowsInSection:s];
+        for (NSInteger r = 0; r < rows; r++) {
+            NSIndexPath *path = [NSIndexPath indexPathForRow:r inSection:s];
+            UITableViewCell *cell = [source tableView:table cellForRowAtIndexPath:path];
+            NSMutableArray<NSString *> *labels = [NSMutableArray array];
+            UIImage *image = nil;
+            PLXCollectLabelsAndImage(cell.contentView, labels, &image);
+            if (labels.count == 0) continue;
+            NSString *candidate = [NSString stringWithFormat:@"menu:%@|%@", labels[0], labels.count > 1 ? labels[1] : @""];
+            if (![candidate isEqualToString:identifier]) continue;
+            [table selectRowAtIndexPath:path animated:NO scrollPosition:UITableViewScrollPositionNone];
+            if ([table.delegate respondsToSelector:@selector(tableView:didSelectRowAtIndexPath:)]) {
+                [table.delegate tableView:table didSelectRowAtIndexPath:path];
+            }
+            return YES;
+        }
+    }
+    return NO;
+}
+
+static void PLXSelectHomeTab(NSString *title) {
+    UITabBar *bar = PLXHomeBar;
+    for (UITabBarItem *item in bar.items) {
+        if (![item.title isEqualToString:title]) continue;
+        if (bar.selectedItem != item) {
+            bar.selectedItem = item;
+            if ([bar.delegate respondsToSelector:@selector(tabBar:didSelectItem:)]) [bar.delegate tabBar:bar didSelectItem:item];
+        }
+        return;
+    }
+}
+
+#pragma mark - Custom tab bar (user's own tabs)
+
+@interface PLXCustomTabs : NSObject <UITabBarControllerDelegate>
+@property (nonatomic, strong) UITabBarController *controller;
+@property (nonatomic, copy) NSArray<NSString *> *identifiers;
+@end
+
+static PLXCustomTabs *PLXCustom;
+
+@implementation PLXCustomTabs
+
+- (void)reloadIfNeeded {
+    NSArray<NSString *> *ids = [NSUserDefaults.standardUserDefaults arrayForKey:PLXSettingTabBarItems] ?: [PLXHomeEntries valueForKey:@"identifier"];
+    if ([ids isEqualToArray:self.identifiers] && self.controller.viewControllers.count) return;
+    NSMutableArray *pages = [NSMutableArray array];
+    NSMutableArray *kept = [NSMutableArray array];
+    for (NSString *identifier in ids) {
+        PLXTabEntry *entry = PLXEntryWithID(identifier);
+        if (!entry) continue; // side menu not loaded yet; retried on the next layout
+        UIViewController *page = [UIViewController new];
+        page.view.backgroundColor = UIColor.clearColor;
+        page.view.userInteractionEnabled = NO;
+        page.tabBarItem = [[UITabBarItem alloc] initWithTitle:entry.title image:entry.image selectedImage:entry.image];
+        [pages addObject:page];
+        [kept addObject:identifier];
+    }
+    if (pages.count == 0) return;
+    self.identifiers = ids.count == kept.count ? ids : nil;
+    self.controller.viewControllers = pages;
+    objc_setAssociatedObject(self.controller, @selector(identifiers), kept, OBJC_ASSOCIATION_COPY_NONATOMIC);
+}
+
+- (void)tabBarController:(UITabBarController *)tabBarController didSelectViewController:(UIViewController *)viewController {
+    NSArray<NSString *> *ids = objc_getAssociatedObject(tabBarController, @selector(identifiers));
+    NSUInteger index = [tabBarController.viewControllers indexOfObject:viewController];
+    if (index == NSNotFound || index >= ids.count) return;
+    NSString *identifier = ids[index];
+    if ([identifier hasPrefix:@"menu:"]) {
+        PLXOpenSideMenuEntry(identifier);
+        return;
+    }
+    NSString *title = [identifier substringFromIndex:5];
+    if (PLXHomeBar && PLXPlexBarShowing(PLXHomeBar)) {
+        PLXSelectHomeTab(title);
+        return;
+    }
+    // Another screen is showing: go Home through the side menu, then pick the tab.
+    for (PLXTabEntry *e in PLXCachedMenuEntries) {
+        if ([e.title isEqualToString:PLXHomeEntries.firstObject.title]) { PLXOpenSideMenuEntry(e.identifier); break; }
+    }
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ PLXSelectHomeTab(title); });
+}
+
+@end
+
+static void PLXUpdateCustomTabs(UIWindow *window) {
+    NSInteger edge = 0;
+    if (@available(iOS 27.1, *)) edge = window ? window.traitCollection.verticalBarEdge : 0;
+    BOOL show = PLXSettingBool(PLXSettingCustomTabBar) && edge != 0 && PLXHomeEntries.count;
+    UIViewController *root = window.rootViewController;
+    if (!show || !root) { PLXCustom.controller.view.hidden = YES; return; }
+    if (!PLXCustom) {
+        PLXCustom = [PLXCustomTabs new];
+        PLXCustom.controller = [UITabBarController new];
+        PLXCustom.controller.delegate = PLXCustom;
+    }
+    UITabBarController *controller = PLXCustom.controller;
+    if (controller.parentViewController != root) {
+        [controller willMoveToParentViewController:nil];
+        [controller.view removeFromSuperview];
+        [controller removeFromParentViewController];
+        [root addChildViewController:controller];
+        controller.view.backgroundColor = UIColor.clearColor;
+        PLXMakePassThrough(controller.view);
+        [root.view addSubview:controller.view];
+        [controller didMoveToParentViewController:root];
+    }
+    [PLXCustom reloadIfNeeded];
+    controller.view.hidden = controller.viewControllers.count == 0;
+    CGRect frame = root.view.bounds;
+    CGFloat miniPlayerTop = PLXMiniPlayerTop(root.view);
+    if (miniPlayerTop < CGRectGetMaxY(frame)) frame.size.height = MAX(0, miniPlayerTop);
+    if (!CGRectEqualToRect(controller.view.frame, frame)) controller.view.frame = frame;
+    if (root.view.subviews.lastObject != controller.view) [root.view bringSubviewToFront:controller.view];
+}
+
 static void PLXUpdateNativeTabs(UITabBar *tabBar) {
     PLXNativeTabs *tabs = objc_getAssociatedObject(tabBar, PLXNativeTabsKey);
+    PLXRememberHomeBar(tabBar);
     NSInteger edge = 0;
     if (@available(iOS 27.1, *)) edge = tabBar.window ? tabBar.window.traitCollection.verticalBarEdge : 0;
     BOOL useNative = edge != 0 && tabBar.items.count > 0;
+
+    // With the user's own tabs, the Home screen's tabs live in that bar; other
+    // screens' tabs (a library's Recommended / Library / Collections) stay as
+    // Plex draws them.
+    if (useNative && PLXSettingBool(PLXSettingCustomTabBar) && PLXHomeEntries.count) {
+        tabs.controller.view.hidden = YES;
+        BOOL isHome = tabBar == PLXHomeBar;
+        tabBar.alpha = isHome ? 0 : 1;
+        if (isHome) objc_setAssociatedObject(tabBar, @selector(alpha), @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        else objc_setAssociatedObject(tabBar, @selector(alpha), nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        PLXUpdateCustomTabs(tabBar.window);
+        return;
+    }
+    PLXCustom.controller.view.hidden = YES;
 
     if (!useNative) {
         tabs.controller.view.hidden = YES;
@@ -258,8 +500,36 @@ static BOOL PLXInstallNativeTabs(void) {
     return YES;
 }
 
+// Plex's root screen lays out when the mini player appears or goes away; the
+// custom tab bar follows so it stays above the mini player.
+static IMP PLXOrigRootDidLayout;
+
+static void PLXRootDidLayoutSubviews(UIViewController *self, SEL _cmd) {
+    ((void (*)(id, SEL))PLXOrigRootDidLayout)(self, _cmd);
+    if (PLXCustom || PLXSettingBool(PLXSettingCustomTabBar)) PLXUpdateCustomTabs(self.view.window);
+}
+
+static void PLXRelayoutTabBars(UIView *view) {
+    if ([NSStringFromClass(view.class) isEqualToString:@"PMSafeAreaTabBar"]) PLXUpdateNativeTabs((UITabBar *)view);
+    for (UIView *sub in view.subviews) PLXRelayoutTabBars(sub);
+}
+
 __attribute__((constructor)) static void PLXInstallNativeTabsAtLaunch(void) {
-    if (PLXInstallNativeTabs()) return;
+    void (^installRoot)(void) = ^{
+        static BOOL installed;
+        Class root = NSClassFromString(@"PMAppViewController");
+        if (installed || !root) return;
+        installed = YES;
+        PLXOrigRootDidLayout = PLXReplaceOnClass(root, @selector(viewDidLayoutSubviews), (IMP)PLXRootDidLayoutSubviews);
+    };
+    if (PLXInstallNativeTabs()) installRoot();
     [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification object:nil
-        queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) { PLXInstallNativeTabs(); }];
+        queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) { PLXInstallNativeTabs(); installRoot(); }];
+    [[NSNotificationCenter defaultCenter] addObserverForName:PLXSettingsDidChangeNotification object:nil
+        queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) {
+            PLXCustom.identifiers = nil;
+            UIWindow *window = PLXMainWindow();
+            PLXRelayoutTabBars(window);
+            PLXUpdateCustomTabs(window);
+        }];
 }

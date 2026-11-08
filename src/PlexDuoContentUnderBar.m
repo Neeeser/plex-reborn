@@ -12,6 +12,7 @@
 // left alone so their text and controls stay inside the safe area.
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
+#import "PlexReborn.h"
 
 static BOOL PLXIsHorizontalRow(UIView *view) {
     if (![view isKindOfClass:UICollectionView.class]) return NO;
@@ -36,6 +37,7 @@ static void PLXCollectRows(UIView *view, NSUInteger depth, NSMutableArray<UIColl
     for (UIView *sub in view.subviews) PLXCollectRows(sub, depth - 1, rows);
 }
 
+static const void *PLXOriginalAdjustmentKey = &PLXOriginalAdjustmentKey;
 static IMP PLXOrigTableLayout;
 
 static void PLXTableLayoutSubviews(UITableView *self, SEL _cmd) {
@@ -46,11 +48,17 @@ static void PLXTableLayoutSubviews(UITableView *self, SEL _cmd) {
     NSMutableArray<UICollectionView *> *rows = [NSMutableArray array];
     for (UITableViewCell *cell in self.visibleCells) PLXCollectRows(cell.contentView, 3, rows);
     if (rows.count == 0) return;
-    if (self.insetsContentViewsToSafeArea) self.insetsContentViewsToSafeArea = NO;
+    BOOL under = PLXSettingBool(PLXSettingRowsUnderBar);
+    if (self.insetsContentViewsToSafeArea == under) self.insetsContentViewsToSafeArea = !under;
     for (UICollectionView *row in rows) {
-        if (row.contentInsetAdjustmentBehavior != UIScrollViewContentInsetAdjustmentAlways) {
-            row.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentAlways;
+        // Remember Plex's own behavior so turning the setting off restores it.
+        NSNumber *original = objc_getAssociatedObject(row, PLXOriginalAdjustmentKey);
+        if (!original) {
+            original = @(row.contentInsetAdjustmentBehavior);
+            objc_setAssociatedObject(row, PLXOriginalAdjustmentKey, original, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
+        UIScrollViewContentInsetAdjustmentBehavior wanted = under ? UIScrollViewContentInsetAdjustmentAlways : original.integerValue;
+        if (row.contentInsetAdjustmentBehavior != wanted) row.contentInsetAdjustmentBehavior = wanted;
     }
 }
 

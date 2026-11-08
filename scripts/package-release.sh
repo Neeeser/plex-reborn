@@ -20,7 +20,7 @@ for f in "$PROJ"/src/*.m "$PROJ"/src/*.c; do
 done
 xcrun -sdk iphoneos clang -arch arm64 -dynamiclib -fobjc-arc -fmodules -mios-version-min=14.5 \
   -framework UIKit -framework Foundation -framework Security \
-  -install_name "@executable_path/Frameworks/$SHIM_NAME" -Wall -Wno-unguarded-availability-new \
+  -install_name "@executable_path/Frameworks/$SHIM_NAME" -Wall -Wno-unguarded-availability-new -DPLX_VERSION="\"$(<"$PROJ/VERSION")\"" \
   -o "$STAGE/$SHIM_NAME" "${sources[@]}"
 if nm -gU "$STAGE/$SHIM_NAME" | grep -q PLXSim; then echo "Simulator-only code leaked into the release"; exit 1; fi
 

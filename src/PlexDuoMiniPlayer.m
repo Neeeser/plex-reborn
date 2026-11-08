@@ -9,6 +9,7 @@
 // row vertically in the bar. Without a vertical bar the guide equals the safe area.
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
+#import "PlexReborn.h"
 
 static const CGFloat PLXMiniPlayerEdgeMargin = 12.0;
 
@@ -72,7 +73,7 @@ static void PLXUpdateMiniPlayerGuide(UIView *view) {
     UIEdgeInsets safe = view.safeAreaInsets;
     NSInteger edge = 0;
     if (@available(iOS 27.1, *)) edge = view.window ? view.window.traitCollection.verticalBarEdge : 0;
-    if (edge == 0) {
+    if (edge == 0 || !PLXSettingBool(PLXSettingFullWidthMiniPlayer)) {
         PLXSetConstant(state.top, safe.top);
         PLXSetConstant(state.bottom, safe.bottom);
         PLXSetConstant(state.leading, safe.left);
