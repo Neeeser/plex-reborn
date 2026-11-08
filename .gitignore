@@ -1,0 +1,19 @@
+# Local machine and account settings
+config.local.sh
+
+# Plex app packages and anything built from them are never committed
+*.ipa
+*.dylib
+*.app/
+*.mobileprovision
+ipa/
+work/
+dist/
+
+# Logs, screenshots and decryption reports can hold account or server details
+logs/
+screenshots/
+*decrypt*.json
+setup-result.json
+
+.DS_Store

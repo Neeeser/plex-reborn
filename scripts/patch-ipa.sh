@@ -44,7 +44,7 @@ APP=$(print -r -- "$WORK"/Payload/*.app(N[1]))
 [[ -d $APP ]] || { echo "No app inside $IN"; exit 1; }
 BIN="$APP/$(plutil -extract CFBundleExecutable raw "$APP/Info.plist")"
 if otool -l "$BIN" | grep -A4 LC_ENCRYPTION_INFO | grep -q "cryptid 1"; then
-  echo "$IN is still encrypted. Decrypt it first (see docs/tools.md)."; exit 1
+  echo "$IN is still encrypted. Decrypt it first with UnfairPlay."; exit 1
 fi
 
 # 1. Remove parts that block sideloading or invite App Store updates.

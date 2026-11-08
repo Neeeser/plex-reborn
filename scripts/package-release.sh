@@ -33,6 +33,6 @@ echo "SHA-256 $SHA"
 
 if [[ ${1:-} == --publish ]]; then
   NOTES=$(awk -v v="## $VERSION" '$0==v{f=1;next} /^## /{f=0} f' "$PROJ/CHANGELOG.md")
-  gh release create "plex-reborn-v$VERSION" "$DIST/PlexReborn-$VERSION.zip" --draft \
+  gh release create "v$VERSION" "$DIST/PlexReborn-$VERSION.zip" --draft \
     --title "Plex Reborn $VERSION" --notes "$NOTES"$'\n\n'"SHA-256: \`$SHA\`"
 fi

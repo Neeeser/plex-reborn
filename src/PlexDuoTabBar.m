@@ -16,8 +16,7 @@
 #import <objc/runtime.h>
 
 // Close to the system vertical tab bar: a 48 pt capsule with 48 x 54 pt tab
-// cells, icons only (from Apple's iPhone Duo design kit, as reported in
-// docs/research/apple-iphone-duo-guidance.md).
+// cells, icons only (Apple's iPhone Duo design kit, as read by third parties).
 static const CGFloat PLXTabIconSide = 24.0;
 static const CGFloat PLXRailWidth = 48.0;
 static const CGFloat PLXRailButtonHeight = 54.0;

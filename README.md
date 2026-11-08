@@ -38,16 +38,14 @@ Tested on iPhone Duo (iOS 27.2) and the iPhone Duo simulator.
 | Debugging | `src/PlexViewDump.m` | Writes the view tree on request; left out of release builds |
 | Simulator only | `src/PlexSim*.m`, `src/PlexSim*.c` | Lets the patched app run in the Duo simulator; compile to nothing on devices |
 
-The general fixes, and why each is needed, are written up in the repo's `docs/duo-playbook/`.
-
 ## Install
 
-You need a Mac with Apple silicon, an Apple developer account (a free Apple ID works but installs last 7 days), and the tools in `docs/tools.md`.
+You need a Mac with Apple silicon, an Apple developer account (a free Apple ID works but installs last 7 days), Xcode 27.1 or later, [uv](https://docs.astral.sh/uv/), [ipatool](https://github.com/majd/ipatool) and [UnfairPlay](https://github.com/DrWhax/unfairplay).
 
 1. Download Plex 8.45 (external version ID 871812101):
-   `tools/bin/ipatool-patched download -b com.plexapp.plex --external-version-id 871812101 --purchase -o Plex-8.45.ipa`
-2. Decrypt it with UnfairPlay (one-time setup in `docs/tools.md`):
-   `tools/bin/unfairplay decrypt --input Plex-8.45.ipa --output Plex-8.45-decrypted.ipa --strip-account-data`
+   `ipatool download -b com.plexapp.plex --external-version-id 871812101 --purchase -o Plex-8.45.ipa`
+2. Decrypt it with UnfairPlay, after its one-time setup (see its README):
+   `unfairplay decrypt --input Plex-8.45.ipa --output Plex-8.45-decrypted.ipa --strip-account-data`
 3. Patch it with the release's `PlexDuoShim.dylib`:
    `./patch-ipa.sh Plex-8.45-decrypted.ipa PlexDuoShim.dylib PlexReborn.ipa --bundle-id com.yourname.plexreborn --team-id YOURTEAMID`
    `--team-id` must be the team that signs the app, or Plex cannot save your sign-in.
@@ -55,7 +53,7 @@ You need a Mac with Apple silicon, an Apple developer account (a free Apple ID w
 
 ## Development
 
-Fill in `config.local.sh` at the repo root first. Put the decrypted IPA at `ipa/Plex-8.45-decrypted.ipa`.
+Copy `config.example.sh` to `config.local.sh` and fill it in first. Put the decrypted IPA at `ipa/Plex-8.45-decrypted.ipa`.
 
 | Script | What it does |
 |---|---|
@@ -72,7 +70,7 @@ Fill in `config.local.sh` at the repo root first. Put the decrypted IPA at `ipa/
 
 1. Update `VERSION` and add a section for it at the top of `CHANGELOG.md`.
 2. `scripts/package-release.sh` and test the zip's dylib with `patch-ipa.sh` on a clean decrypted IPA.
-3. `scripts/package-release.sh --publish` creates a draft release tagged `plex-reborn-v<version>` with the changelog section as notes. Review and publish it on GitHub.
+3. `scripts/package-release.sh --publish` creates a draft release tagged `v<version>` with the changelog section as notes. Review and publish it on GitHub.
 
 ## Legal
 

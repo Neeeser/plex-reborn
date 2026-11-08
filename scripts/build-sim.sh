@@ -1,7 +1,7 @@
 #!/bin/zsh
 # Rebuild the add-on for the simulator, re-sign, install and launch in the Duo simulator.
 # The simulator build also compiles the PlexSim*.m/.c files (guarded by
-# TARGET_OS_SIMULATOR) that make Plex run there; see docs/duo-playbook/simulator-testing.md.
+# TARGET_OS_SIMULATOR) that make Plex run there.
 set -euo pipefail
 source ${0:A:h}/common.sh
 [[ -d $SIM_APP ]] || { echo "No simulator app yet. Run scripts/make-simulator-app.sh first."; exit 1; }
