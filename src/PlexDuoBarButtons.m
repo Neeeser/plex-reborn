@@ -268,7 +268,25 @@ static void PLXNavBarLayoutSubviews(UINavigationBar *self, SEL _cmd) {
     dispatch_async(dispatch_get_main_queue(), ^{ PLXApplyToItem(top, edge != 0, use, weakSelf); });
 }
 
+// A pushed screen's item only becomes the bar's top item when the push
+// animation ends, so Plex's own buttons showed in the title bar while the
+// screen slid in. Load the screen (Plex sets its buttons when the view loads)
+// and move its buttons before the push starts.
+static IMP PLXOrigPushForButtons;
+
+static void PLXPushMovingButtons(UINavigationController *self, SEL _cmd, UIViewController *controller, BOOL animated) {
+    NSInteger edge = 0;
+    if (@available(iOS 27.1, *)) edge = self.view.window ? self.view.window.traitCollection.verticalBarEdge : 0;
+    if (controller && edge != 0 && PLXSettingBool(PLXSettingBarButtonsInVerticalBar)) {
+        [controller loadViewIfNeeded];
+        PLXApplyToItem(controller.navigationItem, YES, YES, self.navigationBar);
+    }
+    ((void (*)(id, SEL, id, BOOL))PLXOrigPushForButtons)(self, _cmd, controller, animated);
+}
+
 __attribute__((constructor)) static void PLXInstallBarButtonProxies(void) {
     Method layout = class_getInstanceMethod(UINavigationBar.class, @selector(layoutSubviews));
     PLXOrigNavBarLayout = method_setImplementation(layout, (IMP)PLXNavBarLayoutSubviews);
+    Method push = class_getInstanceMethod(UINavigationController.class, @selector(pushViewController:animated:));
+    PLXOrigPushForButtons = method_setImplementation(push, (IMP)PLXPushMovingButtons);
 }
