@@ -140,8 +140,13 @@ static BOOL PLXIsTitleOnlyItem(UIBarButtonItem *item) {
 }
 
 static void PLXUpdateRootTitle(UINavigationController *nav, UIViewController *controller, UINavigationBar *bar) {
+    // Only screens whose title is Plex's label item, which can be hidden. The
+    // More page is the first screen of its own stack but has a standard title
+    // and a back button; moving its content up put its first row under the title.
+    BOOL hasTitleItem = NO;
+    for (UIBarButtonItem *item in controller.navigationItem.leftBarButtonItems) hasTitleItem = hasTitleItem || PLXIsTitleOnlyItem(item);
     BOOL hide = controller && controller == nav.viewControllers.firstObject && !nav.presentingViewController
-        && !nav.navigationBarHidden && PLXClearTitleBarOn(nav.view.window);
+        && !nav.navigationBarHidden && hasTitleItem && PLXClearTitleBarOn(nav.view.window);
     NSNumber *applied = objc_getAssociatedObject(controller, PLXRootTitleKey);
     CGFloat shift = hide ? MAX(0, CGRectGetMaxY(bar.frame) - nav.view.window.safeAreaInsets.top) : 0;
     for (UIBarButtonItem *item in controller.navigationItem.leftBarButtonItems) {
