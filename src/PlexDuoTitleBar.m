@@ -16,6 +16,7 @@ static const void *PLXTitleBarStateKey = &PLXTitleBarStateKey;
 @interface PLXTitleBarState : NSObject
 @property (nonatomic, strong) UINavigationBarAppearance *standard, *scrollEdge, *compact, *compactScrollEdge;
 @property (nonatomic, strong) id minimization;
+@property (nonatomic, strong) UINavigationBarAppearance *clear;
 @end
 @implementation PLXTitleBarState
 @end
@@ -23,32 +24,33 @@ static const void *PLXTitleBarStateKey = &PLXTitleBarStateKey;
 static void PLXApplyTitleBar(UINavigationItem *item, BOOL on) {
     if (@available(iOS 27.0, *)) {
         PLXTitleBarState *state = objc_getAssociatedObject(item, PLXTitleBarStateKey);
-        if (on == (state != nil)) return;
-        if (on) {
-            state = [PLXTitleBarState new];
-            state.standard = item.standardAppearance;
-            state.scrollEdge = item.scrollEdgeAppearance;
-            state.compact = item.compactAppearance;
-            state.compactScrollEdge = item.compactScrollEdgeAppearance;
-            state.minimization = item.navigationBarMinimization;
-            objc_setAssociatedObject(item, PLXTitleBarStateKey, state, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            UINavigationBarAppearance *clear = [UINavigationBarAppearance new];
-            [clear configureWithTransparentBackground];
-            item.standardAppearance = clear;
-            item.scrollEdgeAppearance = clear;
-            item.compactAppearance = clear;
-            item.compactScrollEdgeAppearance = clear;
-            UIBarMinimization *minimization = [item.navigationBarMinimization copy] ?: [UIBarMinimization new];
-            minimization.minimizationBehavior = UIBarMinimizationBehaviorOnScrollDown;
-            item.navigationBarMinimization = minimization;
-        } else {
+        if (!on) {
+            if (!state) return;
             item.standardAppearance = state.standard;
             item.scrollEdgeAppearance = state.scrollEdge;
             item.compactAppearance = state.compact;
             item.compactScrollEdgeAppearance = state.compactScrollEdge;
             if (state.minimization) item.navigationBarMinimization = state.minimization;
             objc_setAssociatedObject(item, PLXTitleBarStateKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            return;
         }
+        if (!state) {
+            state = [PLXTitleBarState new];
+            state.clear = [UINavigationBarAppearance new];
+            [state.clear configureWithTransparentBackground];
+            state.minimization = item.navigationBarMinimization;
+            objc_setAssociatedObject(item, PLXTitleBarStateKey, state, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            UIBarMinimization *minimization = [item.navigationBarMinimization copy] ?: [UIBarMinimization new];
+            minimization.minimizationBehavior = UIBarMinimizationBehaviorOnScrollDown;
+            item.navigationBarMinimization = minimization;
+        }
+        // Some screens (a movie's page) set their own appearance after they
+        // appear; whatever Plex sets last is kept for restoring, and the clear
+        // appearance goes back on.
+        if (item.standardAppearance != state.clear) { state.standard = item.standardAppearance; item.standardAppearance = state.clear; }
+        if (item.scrollEdgeAppearance != state.clear) { state.scrollEdge = item.scrollEdgeAppearance; item.scrollEdgeAppearance = state.clear; }
+        if (item.compactAppearance != state.clear) { state.compact = item.compactAppearance; item.compactAppearance = state.clear; }
+        if (item.compactScrollEdgeAppearance != state.clear) { state.compactScrollEdge = item.compactScrollEdgeAppearance; item.compactScrollEdgeAppearance = state.clear; }
     }
 }
 
