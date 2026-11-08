@@ -136,7 +136,7 @@ typedef NS_ENUM(NSInteger, PLXSection) {
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
     switch (section) {
-        case PLXSectionTabBarSwitch: return @"iPhone Duo tab bar";
+        case PLXSectionTabBarSwitch: return @"Tab bar";
         case PLXSectionChosenTabs: return self.custom ? [NSString stringWithFormat:@"Your tabs (up to %lu)", (unsigned long)PLXMaxTabs] : nil;
         case PLXSectionAvailableTabs: return self.custom ? @"Add a tab" : nil;
         case PLXSectionContent: return @"Content";
@@ -150,8 +150,8 @@ typedef NS_ENUM(NSInteger, PLXSection) {
     switch (section) {
         case PLXSectionTabBarSwitch:
             return self.custom
-                ? @"These tabs replace the Home screen's tabs in the vertical bar. Side menu entries open the same screen as in the side menu."
-                : @"Off: the vertical bar shows the tabs of the current screen.";
+                ? @"These tabs replace Plex's tabs at the bottom, or in the vertical bar on iPhone Duo. Side menu entries open the same screen as in the side menu."
+                : @"Off: the tab bar shows the tabs of the current screen.";
         case PLXSectionAvailableTabs:
             return self.custom ? @"Side menu entries appear here once the side menu has loaded." : nil;
         case PLXSectionContent:
@@ -330,7 +330,7 @@ typedef NS_ENUM(NSInteger, PLXSection) {
         title.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
         title.textColor = UIColor.whiteColor;
         UILabel *subtitle = [UILabel new];
-        subtitle.text = @"iPhone Duo tab bar and layout";
+        subtitle.text = @"Tabs, content and layout";
         subtitle.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
         subtitle.textColor = [UIColor colorWithWhite:1 alpha:0.6];
         UIStackView *labels = [[UIStackView alloc] initWithArrangedSubviews:@[title, subtitle]];
