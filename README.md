@@ -15,15 +15,20 @@ Tested on iPhone Duo (iOS 27.2) and the iPhone Duo simulator.
 | One tap shows the player controls | Works | Works | Works | Works |
 | Status bar hides with the controls | Works | Works | Works | Works |
 | Controls on the lower half | n/a | n/a | n/a | Works |
-| Tabs in the Duo's vertical bar | Works | Works in landscape | n/a | n/a |
+| Tabs in the Duo's vertical bar (your own choice of tabs optional) | Works | Works in landscape | n/a | n/a |
+| Top bar buttons and library tabs in the vertical bar | Works | Works in landscape | not tested | not tested |
+| Clear title bar that hides while scrolling | Works | Works in landscape | not tested | not tested |
+| Video reflected below the crease | n/a | n/a | n/a | Works |
 | Live TV controls fit | Works | Works | not tested | not tested |
-| Mini player and sheets use the full width | Works | Works in landscape | not tested | not tested |
+| Floating mini player card; sheets reach the edge | Works | Works in landscape | not tested | not tested |
 | Installs beside App Store Plex | Works | | | |
 
 ## Known problems
 
 - In desk posture the Home screen's poster rows run across the crease.
 - The email sign-in form is shifted left, and the launch logo is oversized.
+- In landscape the player's progress bar and top bar stop 84 points short of the camera side.
+- With your own tabs, the tab bar's selection does not always follow screens opened from the side menu.
 
 ## How it works
 
@@ -31,9 +36,13 @@ Tested on iPhone Duo (iOS 27.2) and the iPhone Duo simulator.
 |---|---|---|
 | Scene support | `src/PlexDuoShim.m` | Scene delegate that hosts Plex's old app-delegate windows; required for apps built against the iOS 27 SDK |
 | Screen handling | `src/PlexDuoScreens.m` | Hides the Duo's second panel from Plex so it does not treat it as an external TV |
-| Player | `src/PlexDuoVideo.m` | Full-screen video, status bar and home indicator hiding, tap fix, desk-posture split |
-| Tab bar | `src/PlexDuoTabBar.m` | Tabs as a rail in the Duo's vertical bar; same-size tab icons |
-| Mini player | `src/PlexDuoMiniPlayer.m` | Uses the full width and centers its row when the vertical bar shows |
+| Player | `src/PlexDuoVideo.m` | Full-screen video, status bar and home indicator hiding, tap fix, desk-posture split and reflection |
+| Tab bar | `src/PlexDuoTabBar.m` | Plex's tabs in the system vertical tab bar; your own tabs; library tabs as a menu; same-size tab icons |
+| Top bar buttons | `src/PlexDuoBarButtons.m` | Moves Plex's side menu, cast, search and more buttons into the vertical bar |
+| Title bar | `src/PlexDuoTitleBar.m` | Clear title bar that hides while scrolling |
+| Posters under the bar | `src/PlexDuoContentUnderBar.m` | Poster rows scroll under the vertical bar |
+| Mini player | `src/PlexDuoMiniPlayer.m` | Floating glass card, full-width bar or Plex's bar |
+| Settings | `src/PlexRebornSettings.m` | The Plex Reborn page in Plex's Settings |
 | Sheets | `src/PlexDuoSheets.m` | Plex's own sheets reach the screen edge beside the vertical bar |
 | Debugging | `src/PlexViewDump.m` | Writes the view tree on request; left out of release builds |
 | Simulator only | `src/PlexSim*.m`, `src/PlexSim*.c` | Lets the patched app run in the Duo simulator; compile to nothing on devices |
