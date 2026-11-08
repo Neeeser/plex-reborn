@@ -174,8 +174,7 @@ static CGFloat PLXFirstBarButtonTop(UIView *view, UIWindow *window, BOOL inFloat
 }
 
 // Plex's title (a label in a custom view) gets an iOS 26 glass bubble sized
-// for a button; while the buttons are in the vertical bar it reads better as
-// plain text.
+// for a button; it reads better as plain text.
 static BOOL PLXHasLabelOnly(UIView *view) {
     if (!view || PLXFirstControl(view)) return NO;
     if ([view isKindOfClass:UILabel.class]) return YES;
@@ -199,8 +198,10 @@ static const CGFloat PLXBarButtonPitch = 60.0;
 static void PLXApplyToItem(UINavigationItem *navItem, BOOL verticalBar, BOOL useProxies, UINavigationBar *bar) {
     if (PLXApplying || !navItem) return;
     PLXApplying = YES;
-    PLXSetTitleBackgroundHidden(navItem.leftBarButtonItems, useProxies);
-    PLXSetTitleBackgroundHidden(objc_getAssociatedObject(navItem, PLXOriginalLeftKey), useProxies);
+    // Plex's title label keeps padding meant for the pre-iOS 26 bar, so inside
+    // a glass bubble it sat off-center; it is plain text in every layout.
+    PLXSetTitleBackgroundHidden(navItem.leftBarButtonItems, YES);
+    PLXSetTitleBackgroundHidden(objc_getAssociatedObject(navItem, PLXOriginalLeftKey), YES);
     NSArray *originalLeft = objc_getAssociatedObject(navItem, PLXOriginalLeftKey);
     NSArray *originalRight = objc_getAssociatedObject(navItem, PLXOriginalRightKey);
     if (useProxies) {

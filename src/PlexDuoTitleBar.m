@@ -103,6 +103,7 @@ static BOOL PLXClearTitleBarOn(UIWindow *window) {
     return edge != 0 && PLXSettingBool(PLXSettingClearTitleBar);
 }
 
+static void PLXUpdateRootTitle(UINavigationController *nav, UIViewController *controller, UINavigationBar *bar);
 static IMP PLXOrigTitleBarLayout;
 
 static void PLXTitleBarLayoutSubviews(UINavigationBar *self, SEL _cmd) {
@@ -110,10 +111,54 @@ static void PLXTitleBarLayoutSubviews(UINavigationBar *self, SEL _cmd) {
     BOOL on = PLXClearTitleBarOn(self.window);
     UINavigationItem *top = self.topItem;
     UIViewController *controller = [self.delegate isKindOfClass:UINavigationController.class] ? ((UINavigationController *)self.delegate).topViewController : nil;
+    UINavigationController *nav = [self.delegate isKindOfClass:UINavigationController.class] ? (UINavigationController *)self.delegate : nil;
     if (top) dispatch_async(dispatch_get_main_queue(), ^{
         PLXApplyTitleBar(top, on);
         PLXSetSoftTopEdge(controller, on);
+        if (nav) PLXUpdateRootTitle(nav, controller, self);
     });
+}
+
+// The first screen of each navigation stack (Home, a library, Live TV) has
+// only its title left in the title bar once its buttons are in the vertical
+// bar, and the vertical bar's selected tab already names the screen. On the
+// short folded screen that title cost 82 pt above the first row. While the
+// clear title bar is on, the first screen's title is hidden and its content
+// starts where the window's safe area does. The bar itself stays: it is what
+// puts the screen's buttons in the vertical bar. Screens opened from there
+// keep their title. Sheets (Settings, pickers) are left alone.
+static const void *PLXRootTitleKey = &PLXRootTitleKey;
+
+static BOOL PLXIsTitleOnlyItem(UIBarButtonItem *item) {
+    UIView *view = item.customView;
+    if (!view) return NO;
+    for (UIView *v = view; v; v = v.subviews.firstObject) {
+        if ([v isKindOfClass:UIControl.class]) return NO;
+        if ([v isKindOfClass:UILabel.class]) return YES;
+    }
+    return NO;
+}
+
+static void PLXUpdateRootTitle(UINavigationController *nav, UIViewController *controller, UINavigationBar *bar) {
+    BOOL hide = controller && controller == nav.viewControllers.firstObject && !nav.presentingViewController
+        && !nav.navigationBarHidden && PLXClearTitleBarOn(nav.view.window);
+    NSNumber *applied = objc_getAssociatedObject(controller, PLXRootTitleKey);
+    CGFloat shift = hide ? MAX(0, CGRectGetMaxY(bar.frame) - nav.view.window.safeAreaInsets.top) : 0;
+    for (UIBarButtonItem *item in controller.navigationItem.leftBarButtonItems) {
+        if (PLXIsTitleOnlyItem(item) && item.customView.hidden != hide) item.customView.hidden = hide;
+    }
+    // With no title there is nothing for the bar's blur to set apart, and it
+    // would blur the first row now that the content starts at the top.
+    if (@available(iOS 26.0, *)) {
+        UIScrollView *scroll = PLXMainScrollView(controller.view, nil);
+        if (scroll && scroll.topEdgeEffect.hidden != hide) scroll.topEdgeEffect.hidden = hide;
+    }
+    CGFloat old = applied.doubleValue;
+    if (fabs(old - shift) < 0.5) return;
+    UIEdgeInsets additional = controller.additionalSafeAreaInsets;
+    additional.top += old - shift;
+    controller.additionalSafeAreaInsets = additional;
+    objc_setAssociatedObject(controller, PLXRootTitleKey, @(shift), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
 // A pushed screen's item only becomes the bar's top item when the push
@@ -127,8 +172,8 @@ static void PLXPush(UINavigationController *self, SEL _cmd, UIViewController *co
 }
 
 __attribute__((constructor)) static void PLXInstallTitleBar(void) {
-    Method push = class_getInstanceMethod(UINavigationController.class, @selector(pushViewController:animated:));
-    PLXOrigPush = method_setImplementation(push, (IMP)PLXPush);
+    Class nav = UINavigationController.class;
+    PLXOrigPush = method_setImplementation(class_getInstanceMethod(nav, @selector(pushViewController:animated:)), (IMP)PLXPush);
     Method layout = class_getInstanceMethod(UINavigationBar.class, @selector(layoutSubviews));
     PLXOrigTitleBarLayout = method_setImplementation(layout, (IMP)PLXTitleBarLayoutSubviews);
     Class item = UINavigationItem.class;
