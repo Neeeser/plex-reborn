@@ -5,7 +5,7 @@
 extern NSString *const PLXSettingCustomTabBar;      // BOOL, default NO
 extern NSString *const PLXSettingTabBarItems;       // NSArray<NSString *> of tab IDs
 extern NSString *const PLXSettingRowsUnderBar;      // BOOL, default YES
-extern NSString *const PLXSettingFullWidthMiniPlayer; // BOOL, default YES
+extern NSString *const PLXSettingMiniPlayerStyle;   // PLXMiniPlayerStyle, default floating card
 extern NSString *const PLXSettingBarButtonsInVerticalBar; // BOOL, default YES
 extern NSString *const PLXSettingClearTitleBar;     // BOOL, default YES
 extern NSString *const PLXSettingLibraryTabs;       // PLXLibraryTabsPlacement, default button
@@ -19,12 +19,22 @@ typedef NS_ENUM(NSInteger, PLXLibraryTabsPlacement) {
     PLXLibraryTabsPlexBar = 2,     // Plex's own bar at the bottom
 };
 
+// How the mini player looks while the vertical bar shows.
+typedef NS_ENUM(NSInteger, PLXMiniPlayerStyle) {
+    PLXMiniPlayerFloatingCard = 0, // a glass card over the content beside the vertical bar's tabs
+    PLXMiniPlayerFullWidth = 1,    // Plex's bar, with the row using the full width
+    PLXMiniPlayerPlex = 2,         // Plex's bar as Plex lays it out
+};
+
 BOOL PLXSettingBool(NSString *key);
 NSInteger PLXSettingInteger(NSString *key);
 
 // The vertical bar button for the library tabs of the screen that owns this
 // navigation item, or nil when that screen has none or another placement is chosen.
 UIBarButtonItem *PLXLibraryTabsItemForNavigationItem(UINavigationItem *item);
+
+// The mini player is a floating card, so content and the vertical bar's tabs run past it.
+BOOL PLXMiniPlayerFloats(UIView *miniPlayer);
 
 // Top of the tabs shown in the vertical bar, in window coordinates; CGFLOAT_MAX when none show.
 CGFloat PLXVerticalTabsTop(UIWindow *window);

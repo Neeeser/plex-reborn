@@ -141,7 +141,8 @@ static CGFloat PLXMiniPlayerTop(UIView *owner) {
     __block __weak void (^weakVisit)(UIView *);
     weakVisit = visit = ^(UIView *v) {
         if ([v isKindOfClass:miniPlayerClass]) {
-            BOOL shown = !v.hidden && v.alpha > 0.01 && v.window;
+            // A floating card sits beside the tabs, which then run to the bottom.
+            BOOL shown = !v.hidden && v.alpha > 0.01 && v.window && !PLXMiniPlayerFloats(v);
             for (UIView *s = v.superview; shown && s; s = s.superview) if (s.hidden) shown = NO;
             if (shown) top = MIN(top, [v convertPoint:CGPointZero toView:owner].y);
             return;

@@ -14,7 +14,7 @@
 NSString *const PLXSettingCustomTabBar = @"PlexReborn.customTabBar";
 NSString *const PLXSettingTabBarItems = @"PlexReborn.tabBarItems";
 NSString *const PLXSettingRowsUnderBar = @"PlexReborn.rowsUnderBar";
-NSString *const PLXSettingFullWidthMiniPlayer = @"PlexReborn.fullWidthMiniPlayer";
+NSString *const PLXSettingMiniPlayerStyle = @"PlexReborn.miniPlayerStyle";
 NSString *const PLXSettingBarButtonsInVerticalBar = @"PlexReborn.barButtonsInVerticalBar";
 NSString *const PLXSettingClearTitleBar = @"PlexReborn.clearTitleBar";
 NSString *const PLXSettingLibraryTabs = @"PlexReborn.libraryTabs";
@@ -26,7 +26,7 @@ BOOL PLXSettingBool(NSString *key) {
     static NSDictionary<NSString *, NSNumber *> *defaults;
     static dispatch_once_t once;
     dispatch_once(&once, ^{
-        defaults = @{ PLXSettingCustomTabBar: @NO, PLXSettingRowsUnderBar: @YES, PLXSettingFullWidthMiniPlayer: @YES, PLXSettingBarButtonsInVerticalBar: @YES, PLXSettingClearTitleBar: @YES };
+        defaults = @{ PLXSettingCustomTabBar: @NO, PLXSettingRowsUnderBar: @YES, PLXSettingBarButtonsInVerticalBar: @YES, PLXSettingClearTitleBar: @YES };
     });
     id value = [NSUserDefaults.standardUserDefaults objectForKey:key];
     return value ? [value boolValue] : defaults[key].boolValue;
@@ -214,7 +214,8 @@ typedef NS_ENUM(NSInteger, PLXSection) {
             if (indexPath.row == 2) return [self choiceCellTitled:@"Library tabs" key:PLXSettingLibraryTabs
                 options:@[@"Menu button", @"Vertical bar tabs", @"Plex's bottom bar"]];
             if (indexPath.row == 3) return [self switchCellTitled:@"Posters scroll under the vertical bar" on:PLXSettingBool(PLXSettingRowsUnderBar) action:@selector(toggleRowsUnderBar:)];
-            return [self switchCellTitled:@"Full-width mini player" on:PLXSettingBool(PLXSettingFullWidthMiniPlayer) action:@selector(toggleMiniPlayer:)];
+            return [self choiceCellTitled:@"Mini player" key:PLXSettingMiniPlayerStyle
+                options:@[@"Floating card", @"Full-width bar", @"Plex's bar"]];
         case PLXSectionAbout: {
             UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:nil];
             cell.textLabel.text = @"Version";
@@ -288,7 +289,6 @@ typedef NS_ENUM(NSInteger, PLXSection) {
 }
 
 - (void)toggleRowsUnderBar:(UISwitch *)sender { PLXSetSetting(PLXSettingRowsUnderBar, @(sender.on)); }
-- (void)toggleMiniPlayer:(UISwitch *)sender { PLXSetSetting(PLXSettingFullWidthMiniPlayer, @(sender.on)); }
 - (void)toggleClearTitleBar:(UISwitch *)sender { PLXSetSetting(PLXSettingClearTitleBar, @(sender.on)); }
 - (void)toggleBarButtons:(UISwitch *)sender { PLXSetSetting(PLXSettingBarButtonsInVerticalBar, @(sender.on)); }
 
