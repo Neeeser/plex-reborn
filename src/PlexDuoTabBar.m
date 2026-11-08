@@ -163,13 +163,24 @@ static void PLXMakePassThrough(UIView *view);
 
 #pragma mark - Tab entries (Home tabs and side menu)
 
-// The tab bar of Plex's Home screen: the first Plex tab bar shown after launch,
-// since Plex opens on Home.
+// The tab bar of Plex's Home screen (PMHomeViewController). Home has one tab
+// when the account's online sources are off in Plex Web (Trending, Activity,
+// Find Friends and My Profile come with Discover), so it is recognized by its
+// screen; the tab count only decides when that screen cannot be found.
 static __weak UITabBar *PLXHomeBar;
 static NSArray<PLXTabEntry *> *PLXHomeEntries;
 
+static BOOL PLXIsHomeScreenBar(UITabBar *bar) {
+    static Class home;
+    if (!home) home = NSClassFromString(@"PMHomeViewController");
+    for (UIResponder *r = bar.nextResponder; r; r = r.nextResponder) {
+        if ([r isKindOfClass:UIViewController.class]) return home ? [r isKindOfClass:home] : bar.items.count >= 3;
+    }
+    return bar.items.count >= 3;
+}
+
 static void PLXRememberHomeBar(UITabBar *bar) {
-    if (PLXHomeBar || bar.items.count < 3 || !bar.window) return;
+    if (PLXHomeBar || bar.items.count < 1 || !bar.window || !PLXIsHomeScreenBar(bar)) return;
     PLXHomeBar = bar;
     NSMutableArray *entries = [NSMutableArray array];
     for (UITabBarItem *item in bar.items) {
