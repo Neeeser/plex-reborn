@@ -20,14 +20,18 @@ NSLayoutConstraint *PLXTopEdgeConstraint(UIView *view, UIView *parent);
 
 static void PLXDumpView(UIView *view, NSUInteger depth, NSMutableString *out) {
     CGRect inWindow = view.window ? [view convertRect:view.bounds toView:nil] : view.frame;
-    [out appendFormat:@"%@%@ frame=%@ inWindow=%@%@%@%@\n",
+    CGFloat bgAlpha = 0;
+    [view.backgroundColor getWhite:NULL alpha:&bgAlpha];
+    NSString *background = bgAlpha > 0.01 ? [NSString stringWithFormat:@" bg=%@", view.backgroundColor] : @"";
+    [out appendFormat:@"%@%@ frame=%@ inWindow=%@%@%@%@%@\n",
         [@"" stringByPaddingToLength:depth * 2 withString:@" " startingAtIndex:0],
         NSStringFromClass(view.class),
         NSStringFromCGRect(view.frame),
         NSStringFromCGRect(inWindow),
         view.hidden ? @" hidden" : @"",
         ([view isKindOfClass:UINavigationBar.class] ? [[[(UINavigationBar *)view topItem].rightBarButtonItems valueForKey:@"debugDescriptionForDump"] componentsJoinedByString:@" | "] : @""),
-        view.layer.sublayers.count ? [NSString stringWithFormat:@" layers=%@", [[view.layer.sublayers valueForKey:@"class"] componentsJoinedByString:@","]] : @""];
+        view.layer.sublayers.count ? [NSString stringWithFormat:@" layers=%@", [[view.layer.sublayers valueForKey:@"class"] componentsJoinedByString:@","]] : @"",
+        background];
     if (!UIEdgeInsetsEqualToEdgeInsets(view.safeAreaInsets, UIEdgeInsetsZero)) {
         [out appendFormat:@"  ↳ safeArea %@\n", NSStringFromUIEdgeInsets(view.safeAreaInsets)];
     }
