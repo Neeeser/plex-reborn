@@ -40,29 +40,6 @@ static void PLXCollectRows(UIView *view, NSUInteger depth, NSMutableArray<UIColl
 static const void *PLXOriginalAdjustmentKey = &PLXOriginalAdjustmentKey;
 static IMP PLXOrigTableLayout;
 
-// Plex slides the whole screen sideways while its side menu is open, so the
-// table's safe area briefly reports most of the screen as covered by the
-// vertical bar. The scroll indicator, placed from that safe area, showed up
-// in the middle of the screen and stayed there after the menu closed. Its side
-// inset is set from the vertical bar's fixed column instead.
-static void PLXFixScrollIndicator(UITableView *table, NSInteger edge, BOOL under) {
-    if (!under) {
-        if (!table.automaticallyAdjustsScrollIndicatorInsets) {
-            table.verticalScrollIndicatorInsets = UIEdgeInsetsZero;
-            table.automaticallyAdjustsScrollIndicatorInsets = YES;
-        }
-        return;
-    }
-    BOOL rightToLeft = table.effectiveUserInterfaceLayoutDirection == UIUserInterfaceLayoutDirectionRightToLeft;
-    BOOL barOnRight = (edge == 2) != rightToLeft;
-    UIEdgeInsets safe = table.safeAreaInsets;
-    UIEdgeInsets insets = UIEdgeInsetsMake(safe.top, 0, safe.bottom, 0);
-    if (barOnRight) insets.right = PLXVerticalBarColumnWidth;
-    else insets.left = PLXVerticalBarColumnWidth;
-    if (table.automaticallyAdjustsScrollIndicatorInsets) table.automaticallyAdjustsScrollIndicatorInsets = NO;
-    if (!UIEdgeInsetsEqualToEdgeInsets(table.verticalScrollIndicatorInsets, insets)) table.verticalScrollIndicatorInsets = insets;
-}
-
 static void PLXTableLayoutSubviews(UITableView *self, SEL _cmd) {
     ((void (*)(id, SEL))PLXOrigTableLayout)(self, _cmd);
     NSInteger edge = 0;
@@ -73,7 +50,6 @@ static void PLXTableLayoutSubviews(UITableView *self, SEL _cmd) {
     if (rows.count == 0) return;
     BOOL under = PLXSettingBool(PLXSettingRowsUnderBar);
     if (self.insetsContentViewsToSafeArea == under) self.insetsContentViewsToSafeArea = !under;
-    PLXFixScrollIndicator(self, edge, under);
     for (UICollectionView *row in rows) {
         // Remember Plex's own behavior so turning the setting off restores it.
         NSNumber *original = objc_getAssociatedObject(row, PLXOriginalAdjustmentKey);
@@ -86,7 +62,40 @@ static void PLXTableLayoutSubviews(UITableView *self, SEL _cmd) {
     }
 }
 
+// Scroll bars are hidden everywhere. Beside the Duo's vertical bar they
+// landed in odd places (left of the bar's column, or mid-screen while Plex's
+// side menu slid the screen sideways), and they add little in an app of
+// poster rows. Every scroll view hides them when it reaches a window, and
+// Plex's own attempts to turn them back on are ignored.
+static IMP PLXOrigSetShowsVertical, PLXOrigSetShowsHorizontal, PLXOrigScrollMoveToWindow;
+
+static void PLXSetShowsVertical(UIScrollView *self, SEL _cmd, BOOL shows) {
+    ((void (*)(id, SEL, BOOL))PLXOrigSetShowsVertical)(self, _cmd, NO);
+}
+
+static void PLXSetShowsHorizontal(UIScrollView *self, SEL _cmd, BOOL shows) {
+    ((void (*)(id, SEL, BOOL))PLXOrigSetShowsHorizontal)(self, _cmd, NO);
+}
+
+static void PLXScrollViewDidMoveToWindow(UIScrollView *self, SEL _cmd) {
+    ((void (*)(id, SEL))PLXOrigScrollMoveToWindow)(self, _cmd);
+    if (self.showsVerticalScrollIndicator) self.showsVerticalScrollIndicator = NO;
+    if (self.showsHorizontalScrollIndicator) self.showsHorizontalScrollIndicator = NO;
+}
+
 __attribute__((constructor)) static void PLXInstallContentUnderBar(void) {
     Method layout = class_getInstanceMethod(UITableView.class, @selector(layoutSubviews));
     PLXOrigTableLayout = method_setImplementation(layout, (IMP)PLXTableLayoutSubviews);
+
+    Class scroll = UIScrollView.class;
+    PLXOrigSetShowsVertical = method_setImplementation(class_getInstanceMethod(scroll, @selector(setShowsVerticalScrollIndicator:)), (IMP)PLXSetShowsVertical);
+    PLXOrigSetShowsHorizontal = method_setImplementation(class_getInstanceMethod(scroll, @selector(setShowsHorizontalScrollIndicator:)), (IMP)PLXSetShowsHorizontal);
+    SEL move = @selector(didMoveToWindow);
+    Method moveMethod = class_getInstanceMethod(scroll, move);
+    // Add an override on UIScrollView itself so UIView's implementation is never replaced.
+    if (class_addMethod(scroll, move, (IMP)PLXScrollViewDidMoveToWindow, method_getTypeEncoding(moveMethod))) {
+        PLXOrigScrollMoveToWindow = method_getImplementation(class_getInstanceMethod(UIView.class, move));
+    } else {
+        PLXOrigScrollMoveToWindow = method_setImplementation(moveMethod, (IMP)PLXScrollViewDidMoveToWindow);
+    }
 }
