@@ -7,6 +7,7 @@ extern NSString *const PLXSettingTabBarItems;       // NSArray<NSString *> of ta
 extern NSString *const PLXSettingRowsUnderBar;      // BOOL, default YES
 extern NSString *const PLXSettingFullWidthMiniPlayer; // BOOL, default YES
 extern NSString *const PLXSettingBarButtonsInVerticalBar; // BOOL, default YES
+extern NSString *const PLXSettingClearTitleBar;     // BOOL, default YES
 extern NSString *const PLXSettingLibraryTabs;       // PLXLibraryTabsPlacement, default button
 extern NSString *const PLXSettingsDidChangeNotification;
 
