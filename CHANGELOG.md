@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [v0.1.0] - 2026-11-08
+## [v1.0.0] - 2026-11-08
 
 ### Features
 
@@ -39,4 +39,4 @@ All notable changes to this project will be documented in this file.
 - Make **one tap** show the player controls on the first try
 - Stop **Live TV controls** overlapping on the folded screen
 
-[v0.1.0]: https://github.com/Neeeser/plex-reborn/releases/tag/v8.45_0.1.0
+[v1.0.0]: https://github.com/Neeeser/plex-reborn/releases/tag/v8.45_1.0.0
