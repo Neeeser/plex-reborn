@@ -321,6 +321,74 @@ static void PLXRegisterLibraryBar(UITabBar *bar) {
     [owner.navigationController.navigationBar setNeedsLayout];
 }
 
+// Plex opens a library on Recommended every time. The tab last picked in each
+// library (Library, Categories...) is stored by the library's source ID and
+// selected again as the library appears. Only picks made by
+// tapping a tab or the menu are stored, so Plex's own reset is not.
+static NSString *const PLXLibraryTabChoicesKey = @"PlexReborn.libraryTabChoices";
+static IMP PLXOrigLibraryDidSelect, PLXOrigLibraryWillAppear, PLXOrigLibraryModelUpdate;
+static BOOL PLXRestoringLibraryTab;
+
+// The library's source: PMTabbedViewController.viewModel.source (a PMKSource).
+static NSString *PLXLibraryKey(UIViewController *library) {
+    static Class sourceScreen;
+    if (!sourceScreen) sourceScreen = NSClassFromString(@"PMSourceViewController");
+    if (!sourceScreen || ![library isKindOfClass:sourceScreen]) return nil;
+    id model = [library valueForKey:@"viewModel"];
+    id source = [model respondsToSelector:NSSelectorFromString(@"source")] ? [model valueForKey:@"source"] : nil;
+    id key = [source respondsToSelector:NSSelectorFromString(@"uniqueIdentifier")] ? [source valueForKey:@"uniqueIdentifier"] : nil;
+    return [key isKindOfClass:NSString.class] && [key length] ? key : nil;
+}
+
+static void PLXLibraryDidSelect(UIViewController *self, SEL _cmd, UITabBar *bar, UITabBarItem *item) {
+    ((void (*)(id, SEL, id, id))PLXOrigLibraryDidSelect)(self, _cmd, bar, item);
+    NSString *key = PLXRestoringLibraryTab ? nil : PLXLibraryKey(self);
+    if (!key || !item.title.length) return;
+    NSMutableDictionary *choices = [[NSUserDefaults.standardUserDefaults dictionaryForKey:PLXLibraryTabChoicesKey] mutableCopy] ?: [NSMutableDictionary dictionary];
+    choices[key] = item.title;
+    [NSUserDefaults.standardUserDefaults setObject:choices forKey:PLXLibraryTabChoicesKey];
+}
+
+static void PLXSelectSavedLibraryTab(UIViewController *library) {
+    NSString *key = PLXLibraryKey(library);
+    NSString *saved = key ? [NSUserDefaults.standardUserDefaults dictionaryForKey:PLXLibraryTabChoicesKey][key] : nil;
+    UITabBar *bar = saved ? [library valueForKey:@"tabBar"] : nil;
+    if (![bar isKindOfClass:UITabBar.class] || [bar.selectedItem.title isEqualToString:saved]) return;
+    for (UITabBarItem *item in bar.items) {
+        if (![item.title isEqualToString:saved]) continue;
+        PLXRestoringLibraryTab = YES;
+        PLXSelectBarItem(bar, item);
+        PLXRestoringLibraryTab = NO;
+        return;
+    }
+}
+
+static void PLXLibraryViewWillAppear(UIViewController *self, SEL _cmd, BOOL animated) {
+    ((void (*)(id, SEL, BOOL))PLXOrigLibraryWillAppear)(self, _cmd, animated);
+    PLXSelectSavedLibraryTab(self);
+    // Plex selects its first tab again once the appearance finishes.
+    __weak UIViewController *weakSelf = self;
+    dispatch_async(dispatch_get_main_queue(), ^{ PLXSelectSavedLibraryTab(weakSelf); });
+}
+
+// Plex rebuilds the tabs, back on the first one, when the library's data arrives.
+static void PLXLibraryModelDidUpdate(UIViewController *self, SEL _cmd, id model) {
+    ((void (*)(id, SEL, id))PLXOrigLibraryModelUpdate)(self, _cmd, model);
+    PLXSelectSavedLibraryTab(self);
+}
+
+static void PLXInstallLibraryTabMemory(void) {
+    Class tabbed = NSClassFromString(@"PMTabbedViewController");
+    Method select = tabbed ? class_getInstanceMethod(tabbed, @selector(tabBar:didSelectItem:)) : NULL;
+    Method appear = tabbed ? class_getInstanceMethod(tabbed, @selector(viewWillAppear:)) : NULL;
+    if (!select || !appear || PLXOrigLibraryDidSelect) return;
+    PLXOrigLibraryDidSelect = method_setImplementation(select, (IMP)PLXLibraryDidSelect);
+    // PMTabbedViewController defines its own viewWillAppear:, so this replaces only Plex's.
+    PLXOrigLibraryWillAppear = method_setImplementation(appear, (IMP)PLXLibraryViewWillAppear);
+    Method update = class_getInstanceMethod(tabbed, NSSelectorFromString(@"tabbedViewModelDidUpdate:"));
+    if (update) PLXOrigLibraryModelUpdate = method_setImplementation(update, (IMP)PLXLibraryModelDidUpdate);
+}
+
 UIBarButtonItem *PLXLibraryTabsItemForNavigationItem(UINavigationItem *navItem) {
     UITabBar *bar = [PLXLibraryBars objectForKey:navItem];
     if (!bar || bar == PLXHomeBar || bar.items.count < 2 || !PLXPlexBarShowing(bar)) return nil;
@@ -664,8 +732,9 @@ __attribute__((constructor)) static void PLXInstallNativeTabsAtLaunch(void) {
         PLXOrigRootDidLayout = PLXReplaceOnClass(root, @selector(viewDidLayoutSubviews), (IMP)PLXRootDidLayoutSubviews);
     };
     if (PLXInstallNativeTabs()) installRoot();
+    PLXInstallLibraryTabMemory();
     [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification object:nil
-        queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) { PLXInstallNativeTabs(); installRoot(); }];
+        queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) { PLXInstallNativeTabs(); installRoot(); PLXInstallLibraryTabMemory(); }];
     [[NSNotificationCenter defaultCenter] addObserverForName:PLXSettingsDidChangeNotification object:nil
         queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) {
             PLXCustom.identifiers = nil;
