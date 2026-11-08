@@ -19,6 +19,7 @@ NSString *const PLXSettingBarButtonsInVerticalBar = @"PlexReborn.barButtonsInVer
 NSString *const PLXSettingClearTitleBar = @"PlexReborn.clearTitleBar";
 NSString *const PLXSettingDeskReflection = @"PlexReborn.deskReflection";
 NSString *const PLXSettingLibraryTabs = @"PlexReborn.libraryTabs";
+NSString *const PLXSettingHideOnlineContent = @"PlexReborn.hideOnlineContent";
 NSString *const PLXSettingsDidChangeNotification = @"PlexRebornSettingsDidChange";
 
 static const NSUInteger PLXMaxTabs = 5;
@@ -52,6 +53,7 @@ typedef NS_ENUM(NSInteger, PLXSection) {
     PLXSectionTabBarSwitch,
     PLXSectionChosenTabs,
     PLXSectionAvailableTabs,
+    PLXSectionContent,
     PLXSectionLayout,
     PLXSectionAbout,
     PLXSectionCount,
@@ -125,6 +127,7 @@ typedef NS_ENUM(NSInteger, PLXSection) {
         case PLXSectionTabBarSwitch: return 1;
         case PLXSectionChosenTabs: return self.custom ? self.chosen.count : 0;
         case PLXSectionAvailableTabs: return self.custom ? self.unchosen.count : 0;
+        case PLXSectionContent: return 1;
         case PLXSectionLayout: return 6;
         case PLXSectionAbout: return 1;
     }
@@ -136,6 +139,7 @@ typedef NS_ENUM(NSInteger, PLXSection) {
         case PLXSectionTabBarSwitch: return @"iPhone Duo tab bar";
         case PLXSectionChosenTabs: return self.custom ? [NSString stringWithFormat:@"Your tabs (up to %lu)", (unsigned long)PLXMaxTabs] : nil;
         case PLXSectionAvailableTabs: return self.custom ? @"Add a tab" : nil;
+        case PLXSectionContent: return @"Content";
         case PLXSectionLayout: return @"Layout";
         case PLXSectionAbout: return @"About";
     }
@@ -150,6 +154,8 @@ typedef NS_ENUM(NSInteger, PLXSection) {
                 : @"Off: the vertical bar shows the tabs of the current screen.";
         case PLXSectionAvailableTabs:
             return self.custom ? @"Side menu entries appear here once the side menu has loaded." : nil;
+        case PLXSectionContent:
+            return @"Removes Plex's Movies & Shows, Rentals and Discover from the side menu and Home. Your libraries, Watchlist and Live TV stay.";
         case PLXSectionLayout:
             return @"Applies when the iPhone Duo's vertical bar is showing. Library tabs are a library's Recommended, Library and Categories: as one button with a menu, as tabs in the vertical bar in place of your tabs, or as Plex's bar along the bottom.";
     }
@@ -209,6 +215,8 @@ typedef NS_ENUM(NSInteger, PLXSection) {
             return [self tabCellForEntry:[self entryWithID:self.chosen[indexPath.row]]];
         case PLXSectionAvailableTabs:
             return [self tabCellForEntry:self.unchosen[indexPath.row]];
+        case PLXSectionContent:
+            return [self switchCellTitled:@"Hide Plex's online content" on:PLXSettingBool(PLXSettingHideOnlineContent) action:@selector(toggleHideOnline:)];
         case PLXSectionLayout:
             if (indexPath.row == 0) return [self switchCellTitled:@"Top bar buttons in the vertical bar" on:PLXSettingBool(PLXSettingBarButtonsInVerticalBar) action:@selector(toggleBarButtons:)];
             if (indexPath.row == 1) return [self switchCellTitled:@"Clear title bar that hides while scrolling" on:PLXSettingBool(PLXSettingClearTitleBar) action:@selector(toggleClearTitleBar:)];
@@ -294,6 +302,7 @@ typedef NS_ENUM(NSInteger, PLXSection) {
 - (void)toggleDeskReflection:(UISwitch *)sender { PLXSetSetting(PLXSettingDeskReflection, @(sender.on)); }
 - (void)toggleClearTitleBar:(UISwitch *)sender { PLXSetSetting(PLXSettingClearTitleBar, @(sender.on)); }
 - (void)toggleBarButtons:(UISwitch *)sender { PLXSetSetting(PLXSettingBarButtonsInVerticalBar, @(sender.on)); }
+- (void)toggleHideOnline:(UISwitch *)sender { PLXSetSetting(PLXSettingHideOnlineContent, @(sender.on)); }
 
 @end
 

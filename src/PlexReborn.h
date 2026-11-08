@@ -10,6 +10,7 @@ extern NSString *const PLXSettingBarButtonsInVerticalBar; // BOOL, default YES
 extern NSString *const PLXSettingClearTitleBar;     // BOOL, default YES
 extern NSString *const PLXSettingDeskReflection;    // BOOL, default YES
 extern NSString *const PLXSettingLibraryTabs;       // PLXLibraryTabsPlacement, default button
+extern NSString *const PLXSettingHideOnlineContent; // BOOL, default NO
 extern NSString *const PLXSettingsDidChangeNotification;
 
 // Where a library's own tabs (Recommended, Library, Categories) go while the
