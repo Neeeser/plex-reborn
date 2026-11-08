@@ -542,12 +542,40 @@ static void PLXUpdateNativeTabs(UITabBar *tabBar) {
     if (owner.view.subviews.lastObject != controller.view) [owner.view bringSubviewToFront:controller.view];
 }
 
+// Plex pads the content screen beside its tab bar by the bar's height
+// (additionalSafeAreaInsets.bottom on that screen). While Plex Reborn hides
+// the bar, that padding is dead space at the end of every list, so it is
+// removed and put back when the bar shows again.
+static const void *PLXSuppressedInsetKey = &PLXSuppressedInsetKey;
+
+static void PLXUpdatePlexBarInset(UITabBar *bar) {
+    BOOL hidden = objc_getAssociatedObject(bar, @selector(alpha)) != nil && bar.alpha < 0.01 && bar.window;
+    UIResponder *responder = bar.superview.nextResponder;
+    if (![responder isKindOfClass:UIViewController.class]) return;
+    for (UIViewController *child in ((UIViewController *)responder).childViewControllers) {
+        NSNumber *saved = objc_getAssociatedObject(child, PLXSuppressedInsetKey);
+        UIEdgeInsets insets = child.additionalSafeAreaInsets;
+        if (hidden && insets.bottom > 1) {
+            objc_setAssociatedObject(child, PLXSuppressedInsetKey, @(insets.bottom), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            insets.bottom = 0;
+            child.additionalSafeAreaInsets = insets;
+        } else if (!hidden && saved) {
+            if (insets.bottom < 1) {
+                insets.bottom = saved.doubleValue;
+                child.additionalSafeAreaInsets = insets;
+            }
+            objc_setAssociatedObject(child, PLXSuppressedInsetKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+    }
+}
+
 static IMP PLXOrigTabBarLayout;
 
 static void PLXTabBarLayoutSubviews(UITabBar *self, SEL _cmd) {
     PLXNormalizeTabImages(self);
     ((void (*)(id, SEL))PLXOrigTabBarLayout)(self, _cmd);
     PLXUpdateNativeTabs(self);
+    PLXUpdatePlexBarInset(self);
 }
 
 static IMP PLXOrigTabBarSetHidden;
