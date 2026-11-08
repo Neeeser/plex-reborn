@@ -8,6 +8,7 @@
 // it are stretched to the playback view's full bounds after each layout pass.
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
+#import "PlexReborn.h"
 
 static IMP PLXOriginalPlaybackLayout;
 
@@ -71,6 +72,74 @@ static void PLXShiftTopEdge(UIView *view, UIView *parent, CGFloat shift) {
     if (top.constant != wanted) top.constant = wanted;
 }
 
+// Desk posture reflection: like Netflix, the half below the crease shows the
+// picture mirrored, blurred and darkened behind the controls, so the bottom
+// half continues the video instead of being a flat panel. UIKit's portal view
+// (private _UIPortalView) draws another view's live rendering, video
+// included, so nothing is copied frame by frame.
+static const void *PLXReflectionKey = &PLXReflectionKey;
+
+static UIView *PLXReflectionView(UIView *playbackView, UIView *source) {
+    UIView *root = objc_getAssociatedObject(playbackView, PLXReflectionKey);
+    if (root) return root;
+    Class portalClass = NSClassFromString(@"_UIPortalView");
+    if (!portalClass || !source) return nil;
+    root = [UIView new];
+    root.clipsToBounds = YES;
+    root.userInteractionEnabled = NO;
+    root.backgroundColor = UIColor.blackColor;
+
+    UIView *portal = [portalClass new];
+    [portal setValue:source forKey:@"sourceView"];
+    if ([portal respondsToSelector:NSSelectorFromString(@"setMatchesPosition:")]) [portal setValue:@NO forKey:@"matchesPosition"];
+    if ([portal respondsToSelector:NSSelectorFromString(@"setMatchesTransform:")]) [portal setValue:@NO forKey:@"matchesTransform"];
+    portal.tag = 1;
+    [root addSubview:portal];
+
+    UIVisualEffectView *blur = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark]];
+    blur.tag = 2;
+    [root addSubview:blur];
+
+    // Darker toward the bottom, where the controls' text sits.
+    UIView *shade = [UIView new];
+    shade.tag = 3;
+    CAGradientLayer *gradient = [CAGradientLayer layer];
+    gradient.colors = @[(id)[UIColor colorWithWhite:0 alpha:0.25].CGColor, (id)[UIColor colorWithWhite:0 alpha:0.75].CGColor];
+    [shade.layer addSublayer:gradient];
+    [root addSubview:shade];
+
+    objc_setAssociatedObject(playbackView, PLXReflectionKey, root, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    return root;
+}
+
+static void PLXUpdateReflection(UIView *playbackView, UIView *container, CGRect fold, BOOL desk) {
+    BOOL on = desk && container && PLXSettingBool(PLXSettingDeskReflection);
+    UIView *existing = objc_getAssociatedObject(playbackView, PLXReflectionKey);
+    if (!on) { existing.hidden = YES; return; }
+    UIView *root = PLXReflectionView(playbackView, container);
+    if (!root) return;
+    if (root.superview != playbackView) [playbackView insertSubview:root aboveSubview:container];
+    root.hidden = NO;
+    CGFloat top = CGRectGetMinY(fold);
+    root.frame = CGRectMake(0, top, CGRectGetWidth(playbackView.bounds), CGRectGetHeight(playbackView.bounds) - top);
+
+    // The portal shows the video container's picture at the container's size,
+    // flipped so the picture's bottom edge meets the crease.
+    UIView *portal = [root viewWithTag:1];
+    CGSize videoSize = container.bounds.size;
+    portal.transform = CGAffineTransformIdentity;
+    portal.bounds = CGRectMake(0, 0, videoSize.width, videoSize.height);
+    portal.center = CGPointMake(videoSize.width / 2, videoSize.height / 2);
+    portal.transform = CGAffineTransformMakeScale(1, -1);
+    [root viewWithTag:2].frame = root.bounds;
+    UIView *shade = [root viewWithTag:3];
+    shade.frame = root.bounds;
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    shade.layer.sublayers.firstObject.frame = shade.bounds;
+    [CATransaction commit];
+}
+
 static void PLXPlaybackLayoutSubviews(UIView *self, SEL _cmd) {
     ((void (*)(id, SEL))PLXOriginalPlaybackLayout)(self, _cmd);
     PLXObserveHinge(self);
@@ -81,8 +150,10 @@ static void PLXPlaybackLayoutSubviews(UIView *self, SEL _cmd) {
     if (desk) videoFrame.size.height = CGRectGetMinY(fold);
 
     Class containerClass = NSClassFromString(@"PMKVideoPlayerContainerView");
+    UIView *videoContainer = nil;
     for (UIView *container in self.subviews) {
         if (!containerClass || ![container isKindOfClass:containerClass]) continue;
+        videoContainer = container;
         if (CGRectEqualToRect(container.frame, videoFrame)) continue;
         CGSize oldSize = container.bounds.size;
         container.frame = videoFrame;
@@ -91,6 +162,8 @@ static void PLXPlaybackLayoutSubviews(UIView *self, SEL _cmd) {
             if (CGSizeEqualToSize(child.frame.size, oldSize)) child.frame = container.bounds;
         }
     }
+    // The mini player's small video view is a playback view too; only the full player is reflected.
+    PLXUpdateReflection(self, CGRectGetHeight(self.bounds) > 200 ? videoContainer : nil, fold, desk);
 
     // Plex's top bar (close, cast, settings) fades rather than moves when the
     // controls hide, so moving it below the crease keeps it working. Plex

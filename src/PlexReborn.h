@@ -8,6 +8,7 @@ extern NSString *const PLXSettingRowsUnderBar;      // BOOL, default YES
 extern NSString *const PLXSettingMiniPlayerStyle;   // PLXMiniPlayerStyle, default floating card
 extern NSString *const PLXSettingBarButtonsInVerticalBar; // BOOL, default YES
 extern NSString *const PLXSettingClearTitleBar;     // BOOL, default YES
+extern NSString *const PLXSettingDeskReflection;    // BOOL, default YES
 extern NSString *const PLXSettingLibraryTabs;       // PLXLibraryTabsPlacement, default button
 extern NSString *const PLXSettingsDidChangeNotification;
 

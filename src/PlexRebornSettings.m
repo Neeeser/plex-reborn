@@ -17,6 +17,7 @@ NSString *const PLXSettingRowsUnderBar = @"PlexReborn.rowsUnderBar";
 NSString *const PLXSettingMiniPlayerStyle = @"PlexReborn.miniPlayerStyle";
 NSString *const PLXSettingBarButtonsInVerticalBar = @"PlexReborn.barButtonsInVerticalBar";
 NSString *const PLXSettingClearTitleBar = @"PlexReborn.clearTitleBar";
+NSString *const PLXSettingDeskReflection = @"PlexReborn.deskReflection";
 NSString *const PLXSettingLibraryTabs = @"PlexReborn.libraryTabs";
 NSString *const PLXSettingsDidChangeNotification = @"PlexRebornSettingsDidChange";
 
@@ -26,7 +27,7 @@ BOOL PLXSettingBool(NSString *key) {
     static NSDictionary<NSString *, NSNumber *> *defaults;
     static dispatch_once_t once;
     dispatch_once(&once, ^{
-        defaults = @{ PLXSettingCustomTabBar: @NO, PLXSettingRowsUnderBar: @YES, PLXSettingBarButtonsInVerticalBar: @YES, PLXSettingClearTitleBar: @YES };
+        defaults = @{ PLXSettingCustomTabBar: @NO, PLXSettingRowsUnderBar: @YES, PLXSettingBarButtonsInVerticalBar: @YES, PLXSettingClearTitleBar: @YES, PLXSettingDeskReflection: @YES };
     });
     id value = [NSUserDefaults.standardUserDefaults objectForKey:key];
     return value ? [value boolValue] : defaults[key].boolValue;
@@ -124,7 +125,7 @@ typedef NS_ENUM(NSInteger, PLXSection) {
         case PLXSectionTabBarSwitch: return 1;
         case PLXSectionChosenTabs: return self.custom ? self.chosen.count : 0;
         case PLXSectionAvailableTabs: return self.custom ? self.unchosen.count : 0;
-        case PLXSectionLayout: return 5;
+        case PLXSectionLayout: return 6;
         case PLXSectionAbout: return 1;
     }
     return 0;
@@ -214,6 +215,7 @@ typedef NS_ENUM(NSInteger, PLXSection) {
             if (indexPath.row == 2) return [self choiceCellTitled:@"Library tabs" key:PLXSettingLibraryTabs
                 options:@[@"Menu button", @"Vertical bar tabs", @"Plex's bottom bar"]];
             if (indexPath.row == 3) return [self switchCellTitled:@"Posters scroll under the vertical bar" on:PLXSettingBool(PLXSettingRowsUnderBar) action:@selector(toggleRowsUnderBar:)];
+            if (indexPath.row == 5) return [self switchCellTitled:@"Reflect the video below the fold in desk posture" on:PLXSettingBool(PLXSettingDeskReflection) action:@selector(toggleDeskReflection:)];
             return [self choiceCellTitled:@"Mini player" key:PLXSettingMiniPlayerStyle
                 options:@[@"Floating card", @"Full-width bar", @"Plex's bar"]];
         case PLXSectionAbout: {
@@ -289,6 +291,7 @@ typedef NS_ENUM(NSInteger, PLXSection) {
 }
 
 - (void)toggleRowsUnderBar:(UISwitch *)sender { PLXSetSetting(PLXSettingRowsUnderBar, @(sender.on)); }
+- (void)toggleDeskReflection:(UISwitch *)sender { PLXSetSetting(PLXSettingDeskReflection, @(sender.on)); }
 - (void)toggleClearTitleBar:(UISwitch *)sender { PLXSetSetting(PLXSettingClearTitleBar, @(sender.on)); }
 - (void)toggleBarButtons:(UISwitch *)sender { PLXSetSetting(PLXSettingBarButtonsInVerticalBar, @(sender.on)); }
 
