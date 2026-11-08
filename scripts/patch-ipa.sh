@@ -7,6 +7,8 @@
 #   --team-id TEAM     your Apple developer team ID; Plex stores its sign-in token
 #                      in a keychain group named after it, and sign-in fails without it
 #   --unpack DIR       also leave the unpacked Payload folder in DIR (used by the dev scripts)
+#   --release          a build for anyone to sign: no bundle ID or team; the add-on
+#                      adopts the signing team's keychain prefix at launch
 #
 # What it changes, in order:
 #   1. Removes the app extensions, SC_Info and iTunesMetadata.plist. Extensions need
@@ -25,17 +27,18 @@ IN=${1:?usage: patch-ipa.sh <decrypted.ipa> <dylib> <output.ipa> [options]}
 DYLIB=${2:?missing dylib}
 OUT=${3:?missing output path}
 shift 3
-BUNDLE_ID="" NAME="Plex Reborn" TEAM="" UNPACK=""
+BUNDLE_ID="" NAME="Plex Reborn" TEAM="" UNPACK="" RELEASE=""
 while (( $# )); do
   case $1 in
     --bundle-id) BUNDLE_ID=$2; shift 2;;
     --name) NAME=$2; shift 2;;
     --team-id) TEAM=$2; shift 2;;
     --unpack) UNPACK=$2; shift 2;;
+    --release) RELEASE=1; shift;;
     *) echo "Unknown option $1"; exit 1;;
   esac
 done
-[[ -n $TEAM ]] || echo "Warning: no --team-id given. Plex sign-in will fail until PlexAppIdPrefix matches the signing team."
+[[ -n $TEAM || -n $RELEASE ]] || echo "Warning: no --team-id given. Plex sign-in will fail until PlexAppIdPrefix matches the signing team."
 
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/plexpatch.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT
