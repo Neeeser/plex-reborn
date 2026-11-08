@@ -121,14 +121,6 @@ static void PLXMakePassThrough(UIView *view) {
 
 @end
 
-// The view controller whose view contains the tab bar.
-static UIViewController *PLXOwningViewController(UIView *view) {
-    for (UIResponder *r = view.superview; r; r = r.nextResponder) {
-        if ([r isKindOfClass:UIViewController.class]) return (UIViewController *)r;
-    }
-    return nil;
-}
-
 // The top of the mini player, in the owner's coordinates, so the native bar
 // sits above it instead of underneath. CGFLOAT_MAX when no mini player shows.
 static CGFloat PLXMiniPlayerTop(UIView *owner) {
@@ -150,6 +142,13 @@ static CGFloat PLXMiniPlayerTop(UIView *owner) {
     return top;
 }
 
+// Plex's bar is on screen: in a window, and neither it nor an ancestor hidden.
+static BOOL PLXPlexBarShowing(UITabBar *tabBar) {
+    if (!tabBar.window) return NO;
+    for (UIView *v = tabBar; v; v = v.superview) if (v.hidden) return NO;
+    return YES;
+}
+
 static void PLXUpdateNativeTabs(UITabBar *tabBar) {
     PLXNativeTabs *tabs = objc_getAssociatedObject(tabBar, PLXNativeTabsKey);
     NSInteger edge = 0;
@@ -164,7 +163,11 @@ static void PLXUpdateNativeTabs(UITabBar *tabBar) {
         }
         return;
     }
-    UIViewController *owner = PLXOwningViewController(tabBar);
+    // Host on the window's root screen, not the screen that owns Plex's bar:
+    // Plex slides its content sideways while the side menu is open, and the
+    // system places the vertical tab bar from its host's position at layout
+    // time, so a host inside the sliding content left the bar on the wrong side.
+    UIViewController *owner = tabBar.window.rootViewController;
     if (!owner) return;
     if (!tabs) {
         tabs = [PLXNativeTabs new];
@@ -190,7 +193,7 @@ static void PLXUpdateNativeTabs(UITabBar *tabBar) {
     // Plex's bar stays in place for its own layout code, invisible and untouchable.
     tabBar.alpha = 0;
     objc_setAssociatedObject(tabBar, @selector(alpha), @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    controller.view.hidden = tabBar.isHidden;
+    controller.view.hidden = !PLXPlexBarShowing(tabBar);
 
     CGRect frame = owner.view.bounds;
     CGFloat miniPlayerTop = PLXMiniPlayerTop(owner.view);
@@ -212,7 +215,19 @@ static IMP PLXOrigTabBarSetHidden;
 static void PLXTabBarSetHidden(UITabBar *self, SEL _cmd, BOOL hidden) {
     ((void (*)(id, SEL, BOOL))PLXOrigTabBarSetHidden)(self, _cmd, hidden);
     PLXNativeTabs *tabs = objc_getAssociatedObject(self, PLXNativeTabsKey);
-    if (tabs && objc_getAssociatedObject(self, @selector(alpha))) tabs.controller.view.hidden = hidden;
+    if (tabs && objc_getAssociatedObject(self, @selector(alpha))) tabs.controller.view.hidden = !PLXPlexBarShowing(self);
+}
+
+// Plex removes a screen's view from the window when another is pushed over it
+// or it is popped; its native bar must go with it.
+static IMP PLXOrigTabBarDidMoveToWindow;
+
+static void PLXTabBarDidMoveToWindow(UITabBar *self, SEL _cmd) {
+    ((void (*)(id, SEL))PLXOrigTabBarDidMoveToWindow)(self, _cmd);
+    PLXNativeTabs *tabs = objc_getAssociatedObject(self, PLXNativeTabsKey);
+    if (!tabs) return;
+    if (self.window) PLXUpdateNativeTabs(self);
+    else tabs.controller.view.hidden = YES;
 }
 
 static IMP PLXOrigTabBarSetSelectedItem;
@@ -239,6 +254,7 @@ static BOOL PLXInstallNativeTabs(void) {
     PLXOrigTabBarLayout = PLXReplaceOnClass(tabBarClass, @selector(layoutSubviews), (IMP)PLXTabBarLayoutSubviews);
     PLXOrigTabBarSetHidden = PLXReplaceOnClass(tabBarClass, @selector(setHidden:), (IMP)PLXTabBarSetHidden);
     PLXOrigTabBarSetSelectedItem = PLXReplaceOnClass(tabBarClass, @selector(setSelectedItem:), (IMP)PLXTabBarSetSelectedItem);
+    PLXOrigTabBarDidMoveToWindow = PLXReplaceOnClass(tabBarClass, @selector(didMoveToWindow), (IMP)PLXTabBarDidMoveToWindow);
     return YES;
 }
 

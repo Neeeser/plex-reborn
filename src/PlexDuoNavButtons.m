@@ -33,12 +33,34 @@ static void PLXSymbolButtonLayoutSubviews(UIButton *self, SEL _cmd) {
     }
 }
 
+// The hamburger (side menu) button draws its image 13 pt left of its slot's
+// center, so the icon hugs the platter's left edge. Center the image view.
+static IMP PLXOrigHamburgerLayout;
+
+static void PLXHamburgerLayoutSubviews(UIView *self, SEL _cmd) {
+    ((void (*)(id, SEL))PLXOrigHamburgerLayout)(self, _cmd);
+    for (UIView *sub in self.subviews) {
+        if (![sub isKindOfClass:UIImageView.class]) continue;
+        CGPoint center = CGPointMake(CGRectGetMidX(self.bounds), sub.center.y);
+        if (fabs(sub.center.x - center.x) > 0.5) sub.center = center;
+    }
+}
+
 __attribute__((constructor)) static void PLXInstallNavButtonCentering(void) {
     void (^install)(void) = ^{
         static BOOL installed;
         Class button = NSClassFromString(@"PMSymbolButton");
+        Class hamburger = NSClassFromString(@"PMHamburgerMenuBarButtonItemView");
         if (installed || !button) return;
         installed = YES;
+        if (hamburger) {
+            Method m = class_getInstanceMethod(hamburger, @selector(layoutSubviews));
+            if (class_addMethod(hamburger, @selector(layoutSubviews), (IMP)PLXHamburgerLayoutSubviews, method_getTypeEncoding(m))) {
+                PLXOrigHamburgerLayout = method_getImplementation(class_getInstanceMethod([hamburger superclass], @selector(layoutSubviews)));
+            } else {
+                PLXOrigHamburgerLayout = method_setImplementation(m, (IMP)PLXHamburgerLayoutSubviews);
+            }
+        }
         Method layout = class_getInstanceMethod(button, @selector(layoutSubviews));
         if (class_addMethod(button, @selector(layoutSubviews), (IMP)PLXSymbolButtonLayoutSubviews, method_getTypeEncoding(layout))) {
             PLXOrigSymbolButtonLayout = method_getImplementation(class_getInstanceMethod([button superclass], @selector(layoutSubviews)));
