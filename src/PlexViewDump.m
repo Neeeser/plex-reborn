@@ -126,8 +126,27 @@ static void PLXDumpClasses(void) {
     [out writeToFile:[library stringByAppendingPathComponent:@"PlexClassDump.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
 }
 
+// Which view receives a touch at a point: Library/PlexHitTestPoint.txt holds "x y";
+// the chain from the hit view up to the window goes to Library/PlexHitTest.txt.
+static void PLXHitTestProbe(void) {
+    NSString *library = NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES).firstObject;
+    NSArray *parts = [[NSString stringWithContentsOfFile:[library stringByAppendingPathComponent:@"PlexHitTestPoint.txt"] encoding:NSUTF8StringEncoding error:nil] componentsSeparatedByString:@" "];
+    if (parts.count < 2) return;
+    CGPoint point = CGPointMake([parts[0] doubleValue], [parts[1] doubleValue]);
+    NSMutableString *out = [NSMutableString string];
+    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+        for (UIWindow *window in ((UIWindowScene *)scene).windows) {
+            UIView *hit = [window hitTest:point withEvent:nil];
+            [out appendFormat:@"WINDOW %@ level=%.0f\n", NSStringFromClass(window.class), window.windowLevel];
+            for (UIView *v = hit; v; v = v.superview) [out appendFormat:@"  %@ %@\n", NSStringFromClass(v.class), NSStringFromCGRect([v convertRect:v.bounds toView:nil])];
+        }
+    }
+    [out writeToFile:[library stringByAppendingPathComponent:@"PlexHitTest.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+}
+
 __attribute__((constructor)) static void PLXRegisterViewDump(void) {
-    int token, classToken;
+    int token, classToken, hitToken;
+    notify_register_dispatch("plexreborn.hittest", &hitToken, dispatch_get_main_queue(), ^(int t) { PLXHitTestProbe(); });
     notify_register_dispatch("plexreborn.viewdump", &token, dispatch_get_main_queue(), ^(int t) { PLXDumpAll(); });
     notify_register_dispatch("plexreborn.classdump", &classToken, dispatch_get_main_queue(), ^(int t) { PLXDumpClasses(); });
 }
