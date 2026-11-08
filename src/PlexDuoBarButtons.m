@@ -6,6 +6,7 @@
 // views, which iOS leaves in the top bar. While the vertical bar shows, each
 // of those items is replaced by a standard button with the same icon that
 // triggers Plex's own control. Without a vertical bar Plex's own items are restored.
+// A library screen's tabs can also appear here as one button (PlexDuoTabBar.m).
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 #import <objc/message.h>
@@ -102,13 +103,24 @@ static NSString *PLXMenuTitle(UIBarButtonItem *original, UIBarButtonItem *proxy,
     return @"Search";
 }
 
+static const void *PLXOverflowKey = &PLXOverflowKey;
+static const void *PLXOverflowStateKey = &PLXOverflowStateKey;
+
 // The folded screen's vertical bar has room for about two buttons above the
 // tabs, so several of Plex's right-hand buttons collapse into one menu, the
-// overflow pattern Apple uses for the vertical bar.
-static NSArray<UIBarButtonItem *> *PLXRightItems(NSArray<UIBarButtonItem *> *items, BOOL *changed) {
+// overflow pattern Apple uses for the vertical bar. librarySection, when
+// given, is listed first in that menu. The menu button is reused so the
+// navigation item's buttons only change when their content does.
+static NSArray<UIBarButtonItem *> *PLXRightItems(UINavigationItem *navItem, NSArray<UIBarButtonItem *> *items, BOOL *changed, UIBarButtonItem *librarySection) {
     NSArray *proxies = PLXProxies(items, changed);
-    if (!*changed || proxies.count < 2) return proxies;
+    if (!librarySection && (!*changed || proxies.count < 2)) return proxies;
+    *changed = YES;
     NSMutableArray<UIMenuElement *> *actions = [NSMutableArray array];
+    NSMutableString *state = [NSMutableString string];
+    if (librarySection.menu) {
+        [actions addObject:[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:librarySection.menu.children]];
+        [state appendFormat:@"library=%@;", librarySection.title];
+    }
     [proxies enumerateObjectsUsingBlock:^(UIBarButtonItem *proxy, NSUInteger i, BOOL *stop) {
         UIAction *original = proxy.primaryAction;
         if (!original) return;
@@ -121,10 +133,34 @@ static NSArray<UIBarButtonItem *> *PLXRightItems(NSArray<UIBarButtonItem *> *ite
         [actions addObject:[UIAction actionWithTitle:title image:image identifier:nil handler:^(UIAction *a) {
             [original performWithSender:nil target:nil];
         }]];
+        [state appendFormat:@"%p;", original];
     }];
-    UIBarButtonItem *overflow = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"ellipsis"] menu:[UIMenu menuWithChildren:actions]];
-    overflow.accessibilityLabel = @"More";
+    UIBarButtonItem *overflow = objc_getAssociatedObject(navItem, PLXOverflowKey);
+    if (!overflow) {
+        overflow = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"ellipsis"] menu:nil];
+        overflow.accessibilityLabel = @"More";
+        objc_setAssociatedObject(navItem, PLXOverflowKey, overflow, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    if (![objc_getAssociatedObject(overflow, PLXOverflowStateKey) isEqualToString:state]) {
+        objc_setAssociatedObject(overflow, PLXOverflowStateKey, state, OBJC_ASSOCIATION_COPY_NONATOMIC);
+        overflow.menu = [UIMenu menuWithChildren:actions];
+    }
     return @[overflow];
+}
+
+// Top of the first button in the vertical bar, in window coordinates, or
+// CGFLOAT_MAX before the bar has buttons. The system draws them as glass
+// views inside the navigation controller's floating bar container.
+static CGFloat PLXFirstBarButtonTop(UIView *view, UIWindow *window, BOOL inFloatingBar) {
+    if (view.hidden) return CGFLOAT_MAX;
+    // The title's glass in the horizontal navigation bar is the same kind of view; only the floating bar counts.
+    inFloatingBar = inFloatingBar || [NSStringFromClass(view.class) containsString:@"FloatingBarContainer"];
+    if (inFloatingBar && [NSStringFromClass(view.class) containsString:@"GlassInteractionView"] && CGRectGetHeight(view.bounds) > 0) {
+        return [view convertRect:view.bounds toView:window].origin.y;
+    }
+    CGFloat top = CGFLOAT_MAX;
+    for (UIView *sub in view.subviews) top = MIN(top, PLXFirstBarButtonTop(sub, window, inFloatingBar));
+    return top;
 }
 
 // Plex's title (a label in a custom view) gets an iOS 26 glass bubble sized
@@ -145,7 +181,12 @@ static void PLXSetTitleBackgroundHidden(NSArray<UIBarButtonItem *> *items, BOOL 
     }
 }
 
-static void PLXApplyToItem(UINavigationItem *navItem, BOOL useProxies) {
+// verticalBar: the vertical bar is showing. useProxies: Plex's buttons are
+// replaced by standard ones there (a setting).
+// Spacing between the vertical bar's buttons (48 pt glass buttons, 12 pt apart).
+static const CGFloat PLXBarButtonPitch = 60.0;
+
+static void PLXApplyToItem(UINavigationItem *navItem, BOOL verticalBar, BOOL useProxies, UINavigationBar *bar) {
     if (PLXApplying || !navItem) return;
     PLXApplying = YES;
     PLXSetTitleBackgroundHidden(navItem.leftBarButtonItems, useProxies);
@@ -154,9 +195,8 @@ static void PLXApplyToItem(UINavigationItem *navItem, BOOL useProxies) {
     NSArray *originalRight = objc_getAssociatedObject(navItem, PLXOriginalRightKey);
     if (useProxies) {
         // Plex may set new items at any time; treat anything that is not one of our proxies as Plex's current items.
-        NSArray *left = navItem.leftBarButtonItems, *right = navItem.rightBarButtonItems;
+        NSArray *left = navItem.leftBarButtonItems;
         BOOL leftIsOurs = left.count && [left.firstObject isEqual:objc_getAssociatedObject(originalLeft.firstObject, PLXProxyKey)];
-        BOOL rightIsOurs = right.count && [right isEqualToArray:objc_getAssociatedObject(navItem, PLXProxyKey) ?: @[]];
         if (!leftIsOurs) {
             BOOL changed = NO;
             NSArray *proxies = PLXProxies(left, &changed);
@@ -165,18 +205,53 @@ static void PLXApplyToItem(UINavigationItem *navItem, BOOL useProxies) {
                 navItem.leftBarButtonItems = proxies;
             }
         }
-        if (!rightIsOurs) {
-            BOOL changed = NO;
-            NSArray *proxies = PLXRightItems(right, &changed);
-            if (changed) {
-                objc_setAssociatedObject(navItem, PLXOriginalRightKey, right, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                objc_setAssociatedObject(navItem, PLXProxyKey, proxies, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                navItem.rightBarButtonItems = proxies;
-            }
+    } else if (originalLeft) {
+        navItem.leftBarButtonItems = originalLeft;
+        objc_setAssociatedObject(navItem, PLXOriginalLeftKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+
+    // Right side: Plex's items (or their overflow menu), then the library tabs button.
+    NSArray *right = navItem.rightBarButtonItems ?: @[];
+    NSArray *applied = objc_getAssociatedObject(navItem, PLXProxyKey);
+    BOOL rightIsOurs = applied && [right isEqualToArray:applied];
+    NSArray *plexRight = rightIsOurs ? originalRight : right;
+    UIBarButtonItem *libraryTabs = verticalBar ? PLXLibraryTabsItemForNavigationItem(navItem) : nil;
+    BOOL remeasure = NO;
+    NSArray *base = plexRight;
+    if (useProxies) {
+        BOOL changed = NO;
+        base = PLXRightItems(navItem, plexRight, &changed, nil);
+        // The navigation bar's buttons and the tabs share the vertical bar but
+        // come from different containers, so the system cannot make room. When
+        // the library tabs button would run into the tabs, its menu joins the overflow menu.
+        UIWindow *window = bar.window;
+        CGFloat firstTop = PLXFirstBarButtonTop(bar.superview, window, NO);
+        NSUInteger count = navItem.leftBarButtonItems.count + base.count + (libraryTabs ? 1 : 0);
+        CGFloat tabsTop = PLXVerticalTabsTop(window);
+        if (libraryTabs && (firstTop == CGFLOAT_MAX || tabsTop == CGFLOAT_MAX)) remeasure = YES;
+        if (libraryTabs && firstTop < CGFLOAT_MAX && firstTop + count * PLXBarButtonPitch > tabsTop) {
+            base = PLXRightItems(navItem, plexRight, &changed, libraryTabs);
+            libraryTabs = nil;
         }
-    } else {
-        if (originalLeft) { navItem.leftBarButtonItems = originalLeft; objc_setAssociatedObject(navItem, PLXOriginalLeftKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC); }
-        if (originalRight) { navItem.rightBarButtonItems = originalRight; objc_setAssociatedObject(navItem, PLXOriginalRightKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC); }
+    }
+    NSArray *final = libraryTabs ? [base arrayByAddingObject:libraryTabs] : base;
+    // The system places the vertical bar's buttons and animates the tabs after
+    // this pass, so a measurement taken now can be missing or mid-animation.
+    // Measure again shortly after any change; this settles once nothing changes.
+    if (![final isEqualToArray:right]) remeasure = YES;
+    if (remeasure && bar) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [bar setNeedsLayout]; });
+    }
+    if (![final isEqualToArray:plexRight]) {
+        if (![final isEqualToArray:right]) {
+            objc_setAssociatedObject(navItem, PLXOriginalRightKey, plexRight, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(navItem, PLXProxyKey, final, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            navItem.rightBarButtonItems = final;
+        }
+    } else if (rightIsOurs) {
+        navItem.rightBarButtonItems = plexRight;
+        objc_setAssociatedObject(navItem, PLXOriginalRightKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(navItem, PLXProxyKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     PLXApplying = NO;
 }
@@ -189,7 +264,8 @@ static void PLXNavBarLayoutSubviews(UINavigationBar *self, SEL _cmd) {
     if (@available(iOS 27.1, *)) edge = self.window ? self.window.traitCollection.verticalBarEdge : 0;
     BOOL use = edge != 0 && PLXSettingBool(PLXSettingBarButtonsInVerticalBar);
     UINavigationItem *top = self.topItem;
-    dispatch_async(dispatch_get_main_queue(), ^{ PLXApplyToItem(top, use); });
+    __weak UINavigationBar *weakSelf = self;
+    dispatch_async(dispatch_get_main_queue(), ^{ PLXApplyToItem(top, edge != 0, use, weakSelf); });
 }
 
 __attribute__((constructor)) static void PLXInstallBarButtonProxies(void) {

@@ -82,6 +82,13 @@ static void PLXMakePassThrough(UIView *view) {
 
 #pragma mark - Native tabs
 
+// Selects a tab in Plex's bar the way a tap does: the bar's selection, then its delegate.
+static void PLXSelectBarItem(UITabBar *bar, UITabBarItem *item) {
+    if (!bar || !item || bar.selectedItem == item) return;
+    bar.selectedItem = item;
+    if ([bar.delegate respondsToSelector:@selector(tabBar:didSelectItem:)]) [bar.delegate tabBar:bar didSelectItem:item];
+}
+
 @interface PLXNativeTabs : NSObject <UITabBarControllerDelegate>
 @property (nonatomic, weak) UITabBar *plexBar;
 @property (nonatomic, strong) UITabBarController *controller;
@@ -119,10 +126,7 @@ static void PLXMakePassThrough(UIView *view) {
     UITabBar *bar = self.plexBar;
     NSUInteger index = [tabBarController.viewControllers indexOfObject:viewController];
     if (!bar || index == NSNotFound || index >= bar.items.count) return;
-    UITabBarItem *item = bar.items[index];
-    if (bar.selectedItem == item) return;
-    bar.selectedItem = item;
-    if ([bar.delegate respondsToSelector:@selector(tabBar:didSelectItem:)]) [bar.delegate tabBar:bar didSelectItem:item];
+    PLXSelectBarItem(bar, bar.items[index]);
 }
 
 @end
@@ -281,13 +285,91 @@ static BOOL PLXOpenSideMenuEntry(NSString *identifier) {
 static void PLXSelectHomeTab(NSString *title) {
     UITabBar *bar = PLXHomeBar;
     for (UITabBarItem *item in bar.items) {
-        if (![item.title isEqualToString:title]) continue;
-        if (bar.selectedItem != item) {
-            bar.selectedItem = item;
-            if ([bar.delegate respondsToSelector:@selector(tabBar:didSelectItem:)]) [bar.delegate tabBar:bar didSelectItem:item];
-        }
-        return;
+        if ([item.title isEqualToString:title]) { PLXSelectBarItem(bar, item); return; }
     }
+}
+
+#pragma mark - Library tabs
+
+// A library screen has its own tab bar (Recommended, Library, Categories).
+// Shown as Plex draws it, it is a second row of controls under the content
+// beside the vertical bar's tabs. The default placement replaces it with one
+// button in the vertical bar whose menu lists the tabs; the button shows the
+// current tab's icon.
+
+// Each library bar, keyed by the navigation item of the screen that owns it.
+static NSMapTable<UINavigationItem *, UITabBar *> *PLXLibraryBars;
+// The library bar shown as tabs in the vertical bar, which then stand in for the user's own tabs.
+static __weak UITabBar *PLXVerticalLibraryBar;
+static const void *PLXLibraryButtonKey = &PLXLibraryButtonKey;
+static const void *PLXLibraryButtonStateKey = &PLXLibraryButtonStateKey;
+
+// The screen that owns a view and sits directly in a navigation controller.
+static UIViewController *PLXNavigationChildOwning(UIView *view) {
+    UIViewController *vc = nil;
+    for (UIResponder *r = view.nextResponder; r; r = r.nextResponder) {
+        if ([r isKindOfClass:UIViewController.class]) { vc = (UIViewController *)r; break; }
+    }
+    while (vc.parentViewController && ![vc.parentViewController isKindOfClass:UINavigationController.class]) vc = vc.parentViewController;
+    return vc.navigationController ? vc : nil;
+}
+
+static void PLXRegisterLibraryBar(UITabBar *bar) {
+    UIViewController *owner = PLXNavigationChildOwning(bar);
+    if (!owner) return;
+    if (!PLXLibraryBars) PLXLibraryBars = [NSMapTable weakToWeakObjectsMapTable];
+    if ([PLXLibraryBars objectForKey:owner.navigationItem] != bar) [PLXLibraryBars setObject:bar forKey:owner.navigationItem];
+    [owner.navigationController.navigationBar setNeedsLayout];
+}
+
+UIBarButtonItem *PLXLibraryTabsItemForNavigationItem(UINavigationItem *navItem) {
+    UITabBar *bar = [PLXLibraryBars objectForKey:navItem];
+    if (!bar || bar == PLXHomeBar || bar.items.count < 2 || !PLXPlexBarShowing(bar)) return nil;
+    if (PLXSettingInteger(PLXSettingLibraryTabs) != PLXLibraryTabsButton) return nil;
+    UIBarButtonItem *button = objc_getAssociatedObject(bar, PLXLibraryButtonKey);
+    if (!button) {
+        button = [[UIBarButtonItem alloc] initWithImage:nil menu:nil];
+        objc_setAssociatedObject(bar, PLXLibraryButtonKey, button, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    UITabBarItem *selected = bar.selectedItem ?: bar.items.firstObject;
+    NSString *state = [NSString stringWithFormat:@"%@>%@", [[bar.items valueForKey:@"title"] componentsJoinedByString:@"|"], selected.title];
+    if ([objc_getAssociatedObject(button, PLXLibraryButtonStateKey) isEqualToString:state]) return button;
+    objc_setAssociatedObject(button, PLXLibraryButtonStateKey, state, OBJC_ASSOCIATION_COPY_NONATOMIC);
+    NSMutableArray<UIAction *> *actions = [NSMutableArray array];
+    __weak UITabBar *weakBar = bar;
+    for (UITabBarItem *item in bar.items) {
+        __weak UITabBarItem *weakItem = item;
+        UIImage *icon = [PLXSquareIcon(item.image) imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+        UIAction *action = [UIAction actionWithTitle:item.title ?: @"" image:icon identifier:nil handler:^(UIAction *a) {
+            PLXSelectBarItem(weakBar, weakItem);
+        }];
+        action.state = item == selected ? UIMenuElementStateOn : UIMenuElementStateOff;
+        [actions addObject:action];
+    }
+    button.menu = [UIMenu menuWithChildren:actions];
+    button.image = [PLXSquareIcon(selected.image) imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    button.title = selected.title;
+    button.accessibilityLabel = selected.title;
+    return button;
+}
+
+static CGFloat PLXPlatterTop(UIView *view, UIWindow *window) {
+    if (view.hidden || view.alpha < 0.01) return CGFLOAT_MAX;
+    if ([NSStringFromClass(view.class) containsString:@"ExpansionPlatterContainer"] && CGRectGetHeight(view.bounds) > 0) {
+        return [view convertRect:view.bounds toView:window].origin.y;
+    }
+    CGFloat top = CGFLOAT_MAX;
+    for (UIView *sub in view.subviews) top = MIN(top, PLXPlatterTop(sub, window));
+    return top;
+}
+
+CGFloat PLXVerticalTabsTop(UIWindow *window) {
+    CGFloat top = CGFLOAT_MAX;
+    for (UIViewController *child in window.rootViewController.childViewControllers) {
+        if (![child isKindOfClass:UITabBarController.class] || child.view.hidden || !child.view.window) continue;
+        top = MIN(top, PLXPlatterTop(child.view, window)); // iOS 26 draws the tabs in a floating container in the controller's view, outside its tabBar
+    }
+    return top;
 }
 
 #pragma mark - Custom tab bar (user's own tabs)
@@ -349,6 +431,8 @@ static void PLXUpdateCustomTabs(UIWindow *window) {
     NSInteger edge = 0;
     if (@available(iOS 27.1, *)) edge = window ? window.traitCollection.verticalBarEdge : 0;
     BOOL show = PLXSettingBool(PLXSettingCustomTabBar) && edge != 0 && PLXHomeEntries.count;
+    UITabBar *library = PLXVerticalLibraryBar;
+    if (library && PLXPlexBarShowing(library) && PLXSettingInteger(PLXSettingLibraryTabs) == PLXLibraryTabsVerticalBar) show = NO;
     UIViewController *root = window.rootViewController;
     if (!show || !root) { PLXCustom.controller.view.hidden = YES; return; }
     if (!PLXCustom) {
@@ -383,19 +467,31 @@ static void PLXUpdateNativeTabs(UITabBar *tabBar) {
     if (@available(iOS 27.1, *)) edge = tabBar.window ? tabBar.window.traitCollection.verticalBarEdge : 0;
     BOOL useNative = edge != 0 && tabBar.items.count > 0;
 
-    // With the user's own tabs, the Home screen's tabs live in that bar; other
-    // screens' tabs (a library's Recommended / Library / Collections) stay as
-    // Plex draws them.
-    if (useNative && PLXSettingBool(PLXSettingCustomTabBar) && PLXHomeEntries.count) {
+    BOOL isHome = tabBar == PLXHomeBar;
+    BOOL custom = PLXSettingBool(PLXSettingCustomTabBar) && PLXHomeEntries.count;
+    NSInteger libraryPlacement = PLXSettingInteger(PLXSettingLibraryTabs);
+    if (useNative && !isHome) PLXRegisterLibraryBar(tabBar);
+
+    // A library's tabs as a menu button (added by the navigation bar code) or as Plex's own bar.
+    if (useNative && !isHome && libraryPlacement != PLXLibraryTabsVerticalBar) {
         tabs.controller.view.hidden = YES;
-        BOOL isHome = tabBar == PLXHomeBar;
-        tabBar.alpha = isHome ? 0 : 1;
-        if (isHome) objc_setAssociatedObject(tabBar, @selector(alpha), @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        else objc_setAssociatedObject(tabBar, @selector(alpha), nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        BOOL hidePlexBar = libraryPlacement == PLXLibraryTabsButton;
+        tabBar.alpha = hidePlexBar ? 0 : 1;
+        objc_setAssociatedObject(tabBar, @selector(alpha), hidePlexBar ? @YES : nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        if (custom) PLXUpdateCustomTabs(tabBar.window);
+        return;
+    }
+    if (useNative && !isHome) PLXVerticalLibraryBar = tabBar;
+
+    // With the user's own tabs, the Home screen's tabs live in that bar.
+    if (useNative && custom && isHome) {
+        tabs.controller.view.hidden = YES;
+        tabBar.alpha = 0;
+        objc_setAssociatedObject(tabBar, @selector(alpha), @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         PLXUpdateCustomTabs(tabBar.window);
         return;
     }
-    PLXCustom.controller.view.hidden = YES;
+    if (!custom) PLXCustom.controller.view.hidden = YES;
 
     if (!useNative) {
         tabs.controller.view.hidden = YES;
@@ -431,6 +527,7 @@ static void PLXUpdateNativeTabs(UITabBar *tabBar) {
     }
     [tabs reloadPagesIfNeeded];
     [tabs syncSelection];
+    if (custom) PLXUpdateCustomTabs(tabBar.window);
 
     // Plex's bar stays in place for its own layout code, invisible and untouchable.
     tabBar.alpha = 0;
@@ -467,9 +564,9 @@ static IMP PLXOrigTabBarDidMoveToWindow;
 static void PLXTabBarDidMoveToWindow(UITabBar *self, SEL _cmd) {
     ((void (*)(id, SEL))PLXOrigTabBarDidMoveToWindow)(self, _cmd);
     PLXNativeTabs *tabs = objc_getAssociatedObject(self, PLXNativeTabsKey);
-    if (!tabs) return;
     if (self.window) PLXUpdateNativeTabs(self);
     else tabs.controller.view.hidden = YES;
+    if (!self.window && PLXCustom) PLXUpdateCustomTabs(PLXMainWindow());
 }
 
 static IMP PLXOrigTabBarSetSelectedItem;
@@ -477,6 +574,7 @@ static IMP PLXOrigTabBarSetSelectedItem;
 static void PLXTabBarSetSelectedItem(UITabBar *self, SEL _cmd, UITabBarItem *item) {
     ((void (*)(id, SEL, UITabBarItem *))PLXOrigTabBarSetSelectedItem)(self, _cmd, item);
     [(PLXNativeTabs *)objc_getAssociatedObject(self, PLXNativeTabsKey) syncSelection];
+    if (objc_getAssociatedObject(self, PLXLibraryButtonKey)) [PLXNavigationChildOwning(self).navigationController.navigationBar setNeedsLayout];
 }
 
 static IMP PLXReplaceOnClass(Class cls, SEL selector, IMP replacement) {

@@ -16,6 +16,7 @@ NSString *const PLXSettingTabBarItems = @"PlexReborn.tabBarItems";
 NSString *const PLXSettingRowsUnderBar = @"PlexReborn.rowsUnderBar";
 NSString *const PLXSettingFullWidthMiniPlayer = @"PlexReborn.fullWidthMiniPlayer";
 NSString *const PLXSettingBarButtonsInVerticalBar = @"PlexReborn.barButtonsInVerticalBar";
+NSString *const PLXSettingLibraryTabs = @"PlexReborn.libraryTabs";
 NSString *const PLXSettingsDidChangeNotification = @"PlexRebornSettingsDidChange";
 
 static const NSUInteger PLXMaxTabs = 5;
@@ -28,6 +29,11 @@ BOOL PLXSettingBool(NSString *key) {
     });
     id value = [NSUserDefaults.standardUserDefaults objectForKey:key];
     return value ? [value boolValue] : defaults[key].boolValue;
+}
+
+NSInteger PLXSettingInteger(NSString *key) {
+    id value = [NSUserDefaults.standardUserDefaults objectForKey:key];
+    return [value respondsToSelector:@selector(integerValue)] ? [value integerValue] : 0;
 }
 
 static void PLXSetSetting(NSString *key, id value) {
@@ -117,7 +123,7 @@ typedef NS_ENUM(NSInteger, PLXSection) {
         case PLXSectionTabBarSwitch: return 1;
         case PLXSectionChosenTabs: return self.custom ? self.chosen.count : 0;
         case PLXSectionAvailableTabs: return self.custom ? self.unchosen.count : 0;
-        case PLXSectionLayout: return 3;
+        case PLXSectionLayout: return 4;
         case PLXSectionAbout: return 1;
     }
     return 0;
@@ -138,12 +144,12 @@ typedef NS_ENUM(NSInteger, PLXSection) {
     switch (section) {
         case PLXSectionTabBarSwitch:
             return self.custom
-                ? @"These tabs replace the Home screen's tabs in the vertical bar. Side menu entries open the same screen as in the side menu. Libraries with their own tabs keep them at the bottom."
+                ? @"These tabs replace the Home screen's tabs in the vertical bar. Side menu entries open the same screen as in the side menu."
                 : @"Off: the vertical bar shows the tabs of the current screen.";
         case PLXSectionAvailableTabs:
             return self.custom ? @"Side menu entries appear here once the side menu has loaded." : nil;
         case PLXSectionLayout:
-            return @"Applies when the iPhone Duo's vertical bar is showing.";
+            return @"Applies when the iPhone Duo's vertical bar is showing. Library tabs are a library's Recommended, Library and Categories: as one button with a menu, as tabs in the vertical bar in place of your tabs, or as Plex's bar along the bottom.";
     }
     return nil;
 }
@@ -157,6 +163,29 @@ typedef NS_ENUM(NSInteger, PLXSection) {
     toggle.on = on;
     [toggle addTarget:self action:action forControlEvents:UIControlEventValueChanged];
     cell.accessoryView = toggle;
+    return cell;
+}
+
+// A row whose value is picked from a pop-up menu; the stored value is the option's index.
+- (UITableViewCell *)choiceCellTitled:(NSString *)title key:(NSString *)key options:(NSArray<NSString *> *)options {
+    UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:nil];
+    cell.textLabel.text = title;
+    cell.selectionStyle = UITableViewCellSelectionStyleNone;
+    NSInteger current = PLXSettingInteger(key);
+    NSMutableArray<UIAction *> *actions = [NSMutableArray array];
+    [options enumerateObjectsUsingBlock:^(NSString *option, NSUInteger i, BOOL *stop) {
+        UIAction *action = [UIAction actionWithTitle:option image:nil identifier:nil handler:^(UIAction *a) { PLXSetSetting(key, @(i)); }];
+        action.state = (NSInteger)i == current ? UIMenuElementStateOn : UIMenuElementStateOff;
+        [actions addObject:action];
+    }];
+    UIButtonConfiguration *config = [UIButtonConfiguration plainButtonConfiguration];
+    config.indicator = UIButtonConfigurationIndicatorPopup;
+    UIButton *button = [UIButton buttonWithConfiguration:config primaryAction:nil];
+    button.menu = [UIMenu menuWithChildren:actions];
+    button.showsMenuAsPrimaryAction = YES;
+    button.changesSelectionAsPrimaryAction = YES;
+    [button sizeToFit];
+    cell.accessoryView = button;
     return cell;
 }
 
@@ -180,7 +209,9 @@ typedef NS_ENUM(NSInteger, PLXSection) {
             return [self tabCellForEntry:self.unchosen[indexPath.row]];
         case PLXSectionLayout:
             if (indexPath.row == 0) return [self switchCellTitled:@"Top bar buttons in the vertical bar" on:PLXSettingBool(PLXSettingBarButtonsInVerticalBar) action:@selector(toggleBarButtons:)];
-            if (indexPath.row == 1) return [self switchCellTitled:@"Posters scroll under the vertical bar" on:PLXSettingBool(PLXSettingRowsUnderBar) action:@selector(toggleRowsUnderBar:)];
+            if (indexPath.row == 1) return [self choiceCellTitled:@"Library tabs" key:PLXSettingLibraryTabs
+                options:@[@"Menu button", @"Vertical bar tabs", @"Plex's bottom bar"]];
+            if (indexPath.row == 2) return [self switchCellTitled:@"Posters scroll under the vertical bar" on:PLXSettingBool(PLXSettingRowsUnderBar) action:@selector(toggleRowsUnderBar:)];
             return [self switchCellTitled:@"Full-width mini player" on:PLXSettingBool(PLXSettingFullWidthMiniPlayer) action:@selector(toggleMiniPlayer:)];
         case PLXSectionAbout: {
             UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:nil];
