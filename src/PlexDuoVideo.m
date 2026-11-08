@@ -164,6 +164,48 @@ static void PLXPinProgressBarToEdges(UIView *player) {
     [NSLayoutConstraint activateConstraints:@[leading, trailing]];
 }
 
+// Plex pins the bottom row of controls 10 points inside the player's safe
+// area. Swap between those pins and the same 10 points inside the player's
+// edges; both sets are kept and only one is active at a time.
+static const void *PLXBottomSafePinsKey = &PLXBottomSafePinsKey;
+static const void *PLXBottomEdgePinsKey = &PLXBottomEdgePinsKey;
+
+static void PLXPinBottomControls(UIView *player, BOOL toEdges) {
+    NSArray<NSLayoutConstraint *> *safePins = objc_getAssociatedObject(player, PLXBottomSafePinsKey);
+    NSArray<NSLayoutConstraint *> *edgePins = objc_getAssociatedObject(player, PLXBottomEdgePinsKey);
+    if (!safePins) {
+        NSMutableArray<NSLayoutConstraint *> *found = [NSMutableArray array];
+        UIView *row = nil;
+        for (NSLayoutConstraint *c in player.constraints) {
+            if (c.secondItem != player.safeAreaLayoutGuide || ![c.firstItem isKindOfClass:UIView.class]) continue;
+            if (c.firstAttribute != NSLayoutAttributeLeading && c.firstAttribute != NSLayoutAttributeTrailing) continue;
+            if (fabs(c.constant) != 10) continue;
+            if (row && c.firstItem != row) return;
+            row = c.firstItem;
+            [found addObject:c];
+        }
+        if (!row || found.count != 2) return;
+        NSMutableArray<NSLayoutConstraint *> *edges = [NSMutableArray array];
+        for (NSLayoutConstraint *c in found) {
+            NSLayoutAnchor *rowAnchor = c.firstAttribute == NSLayoutAttributeLeading ? row.leadingAnchor : row.trailingAnchor;
+            NSLayoutAnchor *playerAnchor = c.firstAttribute == NSLayoutAttributeLeading ? player.leadingAnchor : player.trailingAnchor;
+            [edges addObject:[rowAnchor constraintEqualToAnchor:playerAnchor constant:c.constant]];
+        }
+        safePins = found;
+        edgePins = edges;
+        objc_setAssociatedObject(player, PLXBottomSafePinsKey, safePins, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(player, PLXBottomEdgePinsKey, edgePins, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    if (edgePins.firstObject.active == toEdges) return;
+    if (toEdges) {
+        [NSLayoutConstraint deactivateConstraints:safePins];
+        [NSLayoutConstraint activateConstraints:edgePins];
+    } else {
+        [NSLayoutConstraint deactivateConstraints:edgePins];
+        [NSLayoutConstraint activateConstraints:safePins];
+    }
+}
+
 static void PLXPlaybackLayoutSubviews(UIView *self, SEL _cmd) {
     ((void (*)(id, SEL))PLXOriginalPlaybackLayout)(self, _cmd);
     PLXObserveHinge(self);
@@ -203,15 +245,20 @@ static void PLXPlaybackLayoutSubviews(UIView *self, SEL _cmd) {
     static Class topControlsClass;
     if (!topControlsClass) topControlsClass = NSClassFromString(@"PMTopPlayerControlsView");
     UIView *parent = self.superview;
-    // The Duo reserves an 84-pt strip on one side for its vertical status bar,
-    // which the player hides. On the folded screen the camera sits in that
-    // strip: level with the top bar in portrait and when the strip is on the
-    // left in landscape, but in the bottom corner when the strip is on the
-    // right. Only that last case lets the top bar span the full width.
-    CGRect windowBounds = self.window.bounds;
+    // The Duo reserves an 84-pt strip on one side for its vertical status bar.
+    // The status bar shows at the top of that strip, beside the top bar,
+    // whenever the screen has regular height (unfolded, or folded portrait).
+    // Folded landscape has compact height and no status bar, but the camera
+    // sits in the strip: level with the top bar when the strip is on the
+    // left, in the bottom corner when it is on the right. Only that last case
+    // lets the top bar span the full width.
     UIEdgeInsets safe = parent.safeAreaInsets;
-    BOOL topBarFullWidth = CGRectGetWidth(windowBounds) > CGRectGetHeight(windowBounds)
-        && safe.right > 0 && safe.left == 0;
+    BOOL compactHeight = parent.traitCollection.verticalSizeClass == UIUserInterfaceSizeClassCompact;
+    BOOL cameraBottomRight = compactHeight && safe.right > 0 && safe.left == 0;
+    BOOL topBarFullWidth = cameraBottomRight;
+    // The bottom row (time labels, transport buttons, more) is clear of both
+    // the status bar and the camera everywhere except beside a bottom-corner camera.
+    if (parent) PLXPinBottomControls(parent, !cameraBottomRight);
     for (UIView *bar in parent.subviews) {
         if (![bar isKindOfClass:topControlsClass]) continue;
         CGFloat shift = desk ? CGRectGetMaxY([self convertRect:fold toView:parent]) : 0;
