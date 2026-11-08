@@ -11,6 +11,8 @@ First working build, not yet released.
 - The clear title bar no longer flickers while scrolling an episode's page.
 - Opening a page no longer shows Plex's gray title bar and buttons while the page slides in.
 - The Live TV guide runs under the vertical bar to the screen edge.
+- The Plex Reborn row in Settings is there when Settings opens, instead of appearing after and pushing Account down.
+- Home's scroll bar stays beside the vertical bar after the side menu opens and closes.
 - The Duo's vertical status bar and the home indicator hide during video.
 - One tap shows the player controls on the first try.
 - The Duo's second panel is no longer treated as an external TV, which fixes taps and the status bar when unfolded.

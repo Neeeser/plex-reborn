@@ -40,6 +40,29 @@ static void PLXCollectRows(UIView *view, NSUInteger depth, NSMutableArray<UIColl
 static const void *PLXOriginalAdjustmentKey = &PLXOriginalAdjustmentKey;
 static IMP PLXOrigTableLayout;
 
+// Plex slides the whole screen sideways while its side menu is open, so the
+// table's safe area briefly reports most of the screen as covered by the
+// vertical bar. The scroll indicator, placed from that safe area, showed up
+// in the middle of the screen and stayed there after the menu closed. Its side
+// inset is set from the vertical bar's fixed column instead.
+static void PLXFixScrollIndicator(UITableView *table, NSInteger edge, BOOL under) {
+    if (!under) {
+        if (!table.automaticallyAdjustsScrollIndicatorInsets) {
+            table.verticalScrollIndicatorInsets = UIEdgeInsetsZero;
+            table.automaticallyAdjustsScrollIndicatorInsets = YES;
+        }
+        return;
+    }
+    BOOL rightToLeft = table.effectiveUserInterfaceLayoutDirection == UIUserInterfaceLayoutDirectionRightToLeft;
+    BOOL barOnRight = (edge == 2) != rightToLeft;
+    UIEdgeInsets safe = table.safeAreaInsets;
+    UIEdgeInsets insets = UIEdgeInsetsMake(safe.top, 0, safe.bottom, 0);
+    if (barOnRight) insets.right = PLXVerticalBarColumnWidth;
+    else insets.left = PLXVerticalBarColumnWidth;
+    if (table.automaticallyAdjustsScrollIndicatorInsets) table.automaticallyAdjustsScrollIndicatorInsets = NO;
+    if (!UIEdgeInsetsEqualToEdgeInsets(table.verticalScrollIndicatorInsets, insets)) table.verticalScrollIndicatorInsets = insets;
+}
+
 static void PLXTableLayoutSubviews(UITableView *self, SEL _cmd) {
     ((void (*)(id, SEL))PLXOrigTableLayout)(self, _cmd);
     NSInteger edge = 0;
@@ -50,6 +73,7 @@ static void PLXTableLayoutSubviews(UITableView *self, SEL _cmd) {
     if (rows.count == 0) return;
     BOOL under = PLXSettingBool(PLXSettingRowsUnderBar);
     if (self.insetsContentViewsToSafeArea == under) self.insetsContentViewsToSafeArea = !under;
+    PLXFixScrollIndicator(self, edge, under);
     for (UICollectionView *row in rows) {
         // Remember Plex's own behavior so turning the setting off restores it.
         NSNumber *original = objc_getAssociatedObject(row, PLXOriginalAdjustmentKey);
