@@ -121,7 +121,7 @@ static void PLXUpdateReflection(UIView *playbackView, UIView *container, CGRect 
     if (root.superview != playbackView) [playbackView insertSubview:root aboveSubview:container];
     root.hidden = NO;
     CGFloat top = CGRectGetMinY(fold);
-    root.frame = CGRectMake(0, top, CGRectGetWidth(playbackView.bounds), CGRectGetHeight(playbackView.bounds) - top);
+    root.frame = CGRectMake(CGRectGetMinX(container.frame), top, CGRectGetWidth(container.frame), CGRectGetHeight(playbackView.bounds) - top);
 
     // The portal shows the video container's picture at the container's size,
     // flipped so the picture's bottom edge meets the crease.
@@ -146,7 +146,14 @@ static void PLXPlaybackLayoutSubviews(UIView *self, SEL _cmd) {
 
     CGRect fold = PLXDeskPostureFold(self);
     BOOL desk = !CGRectIsNull(fold);
+    // The window's full width, in case Plex's playback view itself stops at
+    // the safe area (the Duo's status strip) instead of the screen edge.
     CGRect videoFrame = self.bounds;
+    if (self.window && CGRectGetHeight(self.bounds) > 200) {
+        CGRect windowInSelf = [self.window convertRect:self.window.bounds toView:self];
+        videoFrame.origin.x = CGRectGetMinX(windowInSelf);
+        videoFrame.size.width = CGRectGetWidth(windowInSelf);
+    }
     if (desk) videoFrame.size.height = CGRectGetMinY(fold);
 
     Class containerClass = NSClassFromString(@"PMKVideoPlayerContainerView");
