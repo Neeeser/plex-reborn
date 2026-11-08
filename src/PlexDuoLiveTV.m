@@ -11,9 +11,13 @@
 #import <objc/runtime.h>
 #import "PlexReborn.h"
 
-static const void *PLXGuideSafePinKey = &PLXGuideSafePinKey;
 static const void *PLXGuideEdgePinKey = &PLXGuideEdgePinKey;
+static const void *PLXGuideSafePinsKey = &PLXGuideSafePinsKey;
 
+// Plex may rebuild the guide's constraints after it first appears (on a
+// layout change such as the title bar moving its content up), adding a fresh
+// pin to the safe area that beat the edge pin and left the grid 84 pt short.
+// So every layout looks again for any active safe-area pin on the bar's side.
 static void PLXUpdateGuideEdge(UIViewController *controller) {
     UIView *view = controller.viewIfLoaded;
     if (!view.window) return;
@@ -22,34 +26,35 @@ static void PLXUpdateGuideEdge(UIViewController *controller) {
     BOOL rightToLeft = view.effectiveUserInterfaceLayoutDirection == UIUserInterfaceLayoutDirectionRightToLeft;
     BOOL barOnRight = (edge == 2) != rightToLeft;
     BOOL under = edge != 0 && PLXSettingBool(PLXSettingRowsUnderBar);
+    NSLayoutAttribute side = barOnRight ? NSLayoutAttributeRight : NSLayoutAttributeLeft;
 
-    NSLayoutConstraint *safePin = objc_getAssociatedObject(view, PLXGuideSafePinKey);
+    NSMutableArray<NSLayoutConstraint *> *saved = objc_getAssociatedObject(view, PLXGuideSafePinsKey);
     NSLayoutConstraint *edgePin = objc_getAssociatedObject(view, PLXGuideEdgePinKey);
-    if (!safePin) {
-        // Plex's pin of the stack's bar-side edge to the safe area.
-        NSLayoutAttribute side = barOnRight ? NSLayoutAttributeRight : NSLayoutAttributeLeft;
-        for (NSLayoutConstraint *c in view.constraints) {
-            if (c.secondItem != view.safeAreaLayoutGuide || ![c.firstItem isKindOfClass:UIStackView.class]) continue;
-            if (c.firstAttribute != side || c.secondAttribute != side) continue;
-            safePin = c;
-            break;
-        }
-        if (!safePin) return;
-        UIStackView *stack = safePin.firstItem;
-        NSLayoutXAxisAnchor *stackAnchor = barOnRight ? stack.rightAnchor : stack.leftAnchor;
-        NSLayoutXAxisAnchor *viewAnchor = barOnRight ? view.rightAnchor : view.leftAnchor;
-        edgePin = [stackAnchor constraintEqualToAnchor:viewAnchor];
-        objc_setAssociatedObject(view, PLXGuideSafePinKey, safePin, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if (!under) {
+        if (edgePin.active) edgePin.active = NO;
+        for (NSLayoutConstraint *c in saved) if (!c.active && c.firstItem) c.active = YES;
+        [saved removeAllObjects];
+        return;
+    }
+    // Plex's pin of the stack's bar-side edge to the safe area.
+    UIStackView *stack = nil;
+    for (NSLayoutConstraint *c in view.constraints) {
+        if (!c.active || c.secondItem != view.safeAreaLayoutGuide || ![c.firstItem isKindOfClass:UIStackView.class]) continue;
+        if (c.firstAttribute != side || c.secondAttribute != side) continue;
+        stack = c.firstItem;
+        c.active = NO;
+        if (!saved) { saved = [NSMutableArray array]; objc_setAssociatedObject(view, PLXGuideSafePinsKey, saved, OBJC_ASSOCIATION_RETAIN_NONATOMIC); }
+        [saved addObject:c];
+    }
+    if (!stack) stack = edgePin.firstItem;
+    if (!stack || stack.superview != view) return;
+    NSLayoutXAxisAnchor *viewAnchor = barOnRight ? view.rightAnchor : view.leftAnchor;
+    if (edgePin.firstItem != stack || edgePin.secondAttribute != side) {
+        edgePin.active = NO;
+        edgePin = [(barOnRight ? stack.rightAnchor : stack.leftAnchor) constraintEqualToAnchor:viewAnchor];
         objc_setAssociatedObject(view, PLXGuideEdgePinKey, edgePin, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
-    if (edgePin.active == under) return;
-    if (under) {
-        safePin.active = NO;
-        edgePin.active = YES;
-    } else {
-        edgePin.active = NO;
-        safePin.active = YES;
-    }
+    if (!edgePin.active) edgePin.active = YES;
 }
 
 static IMP PLXOrigGuideLayout;
