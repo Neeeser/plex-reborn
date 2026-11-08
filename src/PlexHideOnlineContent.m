@@ -5,10 +5,12 @@
 // (tv.plex.provider.discover) and its free Live TV channels
 // (tv.plex.provider.epg). They appear in the side menu and the More page, add
 // rows to Home, and Plex's channels fill the Live TV guide beside a server's
-// own DVR channels. Every screen gets its sources from Plex's source manager,
-// so its source lists are filtered: pinned sources (side menu, Home), all
-// sources (More page) and the guide's sources. The Watchlist is kept: it also
-// comes from the Discover provider but holds the person's own list.
+// own DVR channels. The lists screens read are filtered: Plex's pinned
+// sources (side menu, Home), the More page's list and the guide's sources.
+// Plex's full source list is left alone: Home's Trending, Activity, Find
+// Friends and My Profile tabs come from the Discover source in it. The
+// Watchlist is kept too: it also comes from the Discover provider but holds
+// the person's own list.
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 #import <objc/message.h>
@@ -48,16 +50,11 @@ static id PLXFiltered(id sources, BOOL guide) {
 }
 
 static __weak id PLXSourceManager;
-static IMP PLXOrigPinnedSources, PLXOrigAllSources, PLXOrigGuideSources, PLXOrigMainGuideSource;
+static IMP PLXOrigPinnedSources, PLXOrigGuideSources, PLXOrigMainGuideSource;
 
 static id PLXPinnedSources(id self, SEL _cmd) {
     PLXSourceManager = self;
     return PLXFiltered(((id (*)(id, SEL))PLXOrigPinnedSources)(self, _cmd), NO);
-}
-
-static id PLXAllSources(id self, SEL _cmd) {
-    PLXSourceManager = self;
-    return PLXFiltered(((id (*)(id, SEL))PLXOrigAllSources)(self, _cmd), NO);
 }
 
 // The Live TV guide's sources: a server's DVR and Plex's own channels.
@@ -107,7 +104,6 @@ __attribute__((constructor)) static void PLXInstallHideOnline(void) {
     Class manager = NSClassFromString(@"PMSourceManager");
     if (!manager) return;
     PLXReplace(manager, @"pinnedSources", (IMP)PLXPinnedSources, &PLXOrigPinnedSources);
-    PLXReplace(manager, @"allSources", (IMP)PLXAllSources, &PLXOrigAllSources);
     PLXReplace(manager, @"hybridGuideSources", (IMP)PLXGuideSources, &PLXOrigGuideSources);
     PLXReplace(manager, @"mainGuideSource", (IMP)PLXMainGuideSource, &PLXOrigMainGuideSource);
     Class more = NSClassFromString(@"PMMoreSourcesListViewModel");
