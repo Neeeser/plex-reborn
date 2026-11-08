@@ -206,6 +206,29 @@ static void PLXPinBottomControls(UIView *player, BOOL toEdges) {
     }
 }
 
+// Plex lays out its top bar inside the bar's layout margins (18 pt each side)
+// plus the safe area. Unfolded, the safe area also reserves 82 pt across the
+// top although the status bar sits only in the side strip, which pushed the
+// whole bar down. The bar's margins are set here instead: Plex's own margins,
+// plus the side insets where the bar has to stay clear of the strip.
+static const void *PLXTopBarMarginsKey = &PLXTopBarMarginsKey;
+
+static void PLXSetTopBarMargins(UIView *bar, UIEdgeInsets safe, BOOL keepSides) {
+    NSValue *stored = objc_getAssociatedObject(bar, PLXTopBarMarginsKey);
+    if (!stored) {
+        stored = [NSValue valueWithUIEdgeInsets:bar.layoutMargins];
+        objc_setAssociatedObject(bar, PLXTopBarMarginsKey, stored, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    UIEdgeInsets plex = stored.UIEdgeInsetsValue;
+    UIEdgeInsets margins = UIEdgeInsetsMake(plex.top, plex.left, plex.bottom, plex.right);
+    if (keepSides) {
+        margins.left += safe.left;
+        margins.right += safe.right;
+    }
+    if (bar.insetsLayoutMarginsFromSafeArea) bar.insetsLayoutMarginsFromSafeArea = NO;
+    if (!UIEdgeInsetsEqualToEdgeInsets(bar.layoutMargins, margins)) bar.layoutMargins = margins;
+}
+
 static void PLXPlaybackLayoutSubviews(UIView *self, SEL _cmd) {
     ((void (*)(id, SEL))PLXOriginalPlaybackLayout)(self, _cmd);
     PLXObserveHinge(self);
@@ -263,9 +286,7 @@ static void PLXPlaybackLayoutSubviews(UIView *self, SEL _cmd) {
         if (![bar isKindOfClass:topControlsClass]) continue;
         CGFloat shift = desk ? CGRectGetMaxY([self convertRect:fold toView:parent]) : 0;
         PLXShiftTopEdge(bar, parent, shift);
-        if (bar.insetsLayoutMarginsFromSafeArea == topBarFullWidth) {
-            bar.insetsLayoutMarginsFromSafeArea = !topBarFullWidth;
-        }
+        PLXSetTopBarMargins(bar, safe, !topBarFullWidth);
     }
     if (parent) PLXPinProgressBarToEdges(parent);
 }
