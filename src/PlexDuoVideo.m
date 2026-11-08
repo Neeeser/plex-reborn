@@ -140,6 +140,30 @@ static void PLXUpdateReflection(UIView *playbackView, UIView *container, CGRect 
     [CATransaction commit];
 }
 
+// Plex pins the progress bar to the player's safe area, which stops it at the
+// camera strip in landscape. The bar sits well above the camera in either
+// orientation, so pin it to the player's edges instead.
+static void PLXPinProgressBarToEdges(UIView *player) {
+    static NSString *const pinned = @"PLXProgressBarEdge";
+    NSMutableArray<NSLayoutConstraint *> *safeAreaPins = [NSMutableArray array];
+    UIView *bar = nil;
+    for (NSLayoutConstraint *c in player.constraints) {
+        if ([c.identifier isEqualToString:pinned]) return;
+        if (c.secondItem != player.safeAreaLayoutGuide || ![c.firstItem isKindOfClass:UIView.class]) continue;
+        if (c.firstAttribute != NSLayoutAttributeLeading && c.firstAttribute != NSLayoutAttributeTrailing) continue;
+        UIView *view = c.firstItem;
+        if (![view.accessibilityIdentifier isEqualToString:@"videoPlayer.progressView"]) continue;
+        bar = view;
+        [safeAreaPins addObject:c];
+    }
+    if (!bar || safeAreaPins.count != 2) return;
+    [NSLayoutConstraint deactivateConstraints:safeAreaPins];
+    NSLayoutConstraint *leading = [bar.leadingAnchor constraintEqualToAnchor:player.leadingAnchor];
+    NSLayoutConstraint *trailing = [bar.trailingAnchor constraintEqualToAnchor:player.trailingAnchor];
+    leading.identifier = trailing.identifier = pinned;
+    [NSLayoutConstraint activateConstraints:@[leading, trailing]];
+}
+
 static void PLXPlaybackLayoutSubviews(UIView *self, SEL _cmd) {
     ((void (*)(id, SEL))PLXOriginalPlaybackLayout)(self, _cmd);
     PLXObserveHinge(self);
@@ -179,11 +203,24 @@ static void PLXPlaybackLayoutSubviews(UIView *self, SEL _cmd) {
     static Class topControlsClass;
     if (!topControlsClass) topControlsClass = NSClassFromString(@"PMTopPlayerControlsView");
     UIView *parent = self.superview;
+    // The Duo reserves an 84-pt strip on one side for its vertical status bar,
+    // which the player hides. On the folded screen the camera sits in that
+    // strip: level with the top bar in portrait and when the strip is on the
+    // left in landscape, but in the bottom corner when the strip is on the
+    // right. Only that last case lets the top bar span the full width.
+    CGRect windowBounds = self.window.bounds;
+    UIEdgeInsets safe = parent.safeAreaInsets;
+    BOOL topBarFullWidth = CGRectGetWidth(windowBounds) > CGRectGetHeight(windowBounds)
+        && safe.right > 0 && safe.left == 0;
     for (UIView *bar in parent.subviews) {
         if (![bar isKindOfClass:topControlsClass]) continue;
         CGFloat shift = desk ? CGRectGetMaxY([self convertRect:fold toView:parent]) : 0;
         PLXShiftTopEdge(bar, parent, shift);
+        if (bar.insetsLayoutMarginsFromSafeArea == topBarFullWidth) {
+            bar.insetsLayoutMarginsFromSafeArea = !topBarFullWidth;
+        }
     }
+    if (parent) PLXPinProgressBarToEdges(parent);
 }
 
 static BOOL PLXInstallFullBleedVideoIfPossible(void) {

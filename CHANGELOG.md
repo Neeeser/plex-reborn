@@ -6,6 +6,7 @@ First working build, not yet released.
 
 - Scene lifecycle support so Plex 8.45 runs when stamped with the iOS 27.1 SDK.
 - Full-screen video on the folded and unfolded screens.
+- The player's progress bar spans the full screen width, and in landscape the top bar reaches the edge when the camera is in the bottom corner.
 - The Duo's vertical status bar and the home indicator hide during video.
 - One tap shows the player controls on the first try.
 - The Duo's second panel is no longer treated as an external TV, which fixes taps and the status bar when unfolded.

@@ -27,7 +27,6 @@ Tested on iPhone Duo (iOS 27.2) and the iPhone Duo simulator.
 
 - In desk posture the Home screen's poster rows run across the crease.
 - The email sign-in form is shifted left, and the launch logo is oversized.
-- In landscape the player's progress bar and top bar stop 84 points short of the camera side.
 - With your own tabs, the tab bar's selection does not always follow screens opened from the side menu.
 
 ## How it works
