@@ -1,30 +1,28 @@
-// Tab bar on the Duo's vertical bar, and consistent tab icon sizes.
+// Plex's tabs in the Duo's native vertical tab bar, and consistent tab icon sizes.
 //
-// iOS 27.1 moves a UITabBarController's tabs into the Duo's vertical bar (on
-// the outer screen, and on the inner screen in landscape). Plex 8.45 does not
-// use UITabBarController: it places a standalone tab bar (PMSafeAreaTabBar)
-// inside its own screen, so the system leaves it at the bottom. Whenever the
-// system reports a vertical bar (UITraitCollection.verticalBarEdge), this file
-// hides Plex's bar and shows the same tabs as a column of icons in the
-// vertical bar's strip, below the clock and status icons. Choosing a tab goes
-// through Plex's own tab bar and its delegate, so Plex's navigation is unchanged.
+// iOS 27.1 draws a UITabBarController's tabs in the Duo's vertical bar (on the
+// outer screen, and on the inner screen in landscape): icons in a glass column
+// at the bottom of the bar's strip that expands with labels when dragged.
+// Plex 8.45 does not use UITabBarController. It places a standalone tab bar
+// (PMSafeAreaTabBar) inside its own screens, so the system leaves it at the
+// bottom. For each of Plex's tab bars, this file adds a real UITabBarController
+// with the same tabs on top of the screen that owns the bar. Its pages are empty
+// and transparent and pass touches through, so only the system's tab bar is
+// visible and touchable. Choosing a tab goes through Plex's own tab bar and its
+// delegate, so Plex's navigation is unchanged. Without a vertical bar (unfolded
+// portrait) the native bar is hidden and Plex's own bar is used.
 //
 // Plex's tab images come in different sizes; the floating tab bar draws them at
 // their natural size, so some icons fill the whole button and crowd their
 // labels. Every tab image is redrawn once into the same square.
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
+#import <objc/message.h>
 
-// Close to the system vertical tab bar: a 48 pt capsule with 48 x 54 pt tab
-// cells, icons only (Apple's iPhone Duo design kit, as read by third parties).
 static const CGFloat PLXTabIconSide = 24.0;
-static const CGFloat PLXRailWidth = 48.0;
-static const CGFloat PLXRailButtonHeight = 54.0;
-// The clock and status icons occupy the top of the vertical bar's strip.
-static const CGFloat PLXRailTopClearance = 160.0;
 
 static const void *PLXNormalizedImageKey = &PLXNormalizedImageKey;
-static const void *PLXRailKey = &PLXRailKey;
+static const void *PLXNativeTabsKey = &PLXNativeTabsKey;
 
 static UIImage *PLXSquareIcon(UIImage *image) {
     if (!image || objc_getAssociatedObject(image, PLXNormalizedImageKey)) return image;
@@ -49,146 +47,156 @@ static void PLXNormalizeTabImages(UITabBar *tabBar) {
     }
 }
 
-#pragma mark - Rail
+#pragma mark - Pass-through container view
 
-@interface PLXTabRail : UIView
-@property (nonatomic, weak) UITabBar *tabBar;
-@property (nonatomic, strong) UIVisualEffectView *background;
-@property (nonatomic, strong) UIView *selectionPlatter;
-@property (nonatomic, strong) NSMutableArray<UIButton *> *buttons;
+// The tab bar controller covers the whole screen; touches anywhere except its
+// tab bar must reach Plex underneath. Its view gets a subclass whose hit test
+// only returns views inside the system's bar UI.
+static UIView *PLXPassThroughHitTest(UIView *self, SEL _cmd, CGPoint point, UIEvent *event) {
+    struct objc_super parent = { self, class_getSuperclass(object_getClass(self)) };
+    UIView *hit = ((UIView *(*)(struct objc_super *, SEL, CGPoint, UIEvent *))objc_msgSendSuper)(&parent, _cmd, point, event);
+    for (UIView *v = hit; v && v != self; v = v.superview) {
+        NSString *name = NSStringFromClass(v.class);
+        if ([v isKindOfClass:UITabBar.class] || [name containsString:@"TabBar"] || [name containsString:@"FloatingBar"] || [name containsString:@"TabButton"]) return hit;
+    }
+    return nil;
+}
+
+static void PLXMakePassThrough(UIView *view) {
+    NSString *name = [@"PLXPassThrough_" stringByAppendingString:NSStringFromClass(view.class)];
+    Class subclass = NSClassFromString(name);
+    if (!subclass) {
+        subclass = objc_allocateClassPair(view.class, name.UTF8String, 0);
+        Method m = class_getInstanceMethod(UIView.class, @selector(hitTest:withEvent:));
+        class_addMethod(subclass, @selector(hitTest:withEvent:), (IMP)PLXPassThroughHitTest, method_getTypeEncoding(m));
+        objc_registerClassPair(subclass);
+    }
+    object_setClass(view, subclass);
+}
+
+#pragma mark - Native tabs
+
+@interface PLXNativeTabs : NSObject <UITabBarControllerDelegate>
+@property (nonatomic, weak) UITabBar *plexBar;
+@property (nonatomic, strong) UITabBarController *controller;
+@property (nonatomic, copy) NSArray<NSString *> *titles;
 @end
 
-@implementation PLXTabRail
+@implementation PLXNativeTabs
 
-- (instancetype)initWithTabBar:(UITabBar *)tabBar {
-    if ((self = [super initWithFrame:CGRectZero])) {
-        _tabBar = tabBar;
-        _buttons = [NSMutableArray array];
-        UIVisualEffect *effect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterialDark];
-        if (@available(iOS 26.0, *)) effect = [UIGlassEffect effectWithStyle:UIGlassEffectStyleRegular];
-        _background = [[UIVisualEffectView alloc] initWithEffect:effect];
-        _background.clipsToBounds = YES;
-        _background.layer.cornerCurve = kCACornerCurveContinuous;
-        [self addSubview:_background];
-        _selectionPlatter = [[UIView alloc] init];
-        _selectionPlatter.backgroundColor = [UIColor colorWithWhite:1 alpha:0.16];
-        _selectionPlatter.layer.cornerCurve = kCACornerCurveContinuous;
-        _selectionPlatter.userInteractionEnabled = NO;
-        [_background.contentView addSubview:_selectionPlatter];
+- (void)reloadPagesIfNeeded {
+    NSArray<UITabBarItem *> *items = self.plexBar.items;
+    NSArray<NSString *> *titles = [items valueForKey:@"title"];
+    if ([titles isEqualToArray:self.titles]) return;
+    self.titles = titles;
+    NSMutableArray *pages = [NSMutableArray array];
+    for (UITabBarItem *item in items) {
+        UIViewController *page = [UIViewController new];
+        page.view.backgroundColor = UIColor.clearColor;
+        page.view.userInteractionEnabled = NO;
+        page.tabBarItem = [[UITabBarItem alloc] initWithTitle:item.title image:PLXSquareIcon(item.image) selectedImage:PLXSquareIcon(item.selectedImage)];
+        page.tabBarItem.accessibilityLabel = item.accessibilityLabel ?: item.title;
+        [pages addObject:page];
     }
-    return self;
+    self.controller.viewControllers = pages;
 }
 
-- (void)reloadItems {
-    NSArray<UITabBarItem *> *items = self.tabBar.items;
-    while (self.buttons.count > items.count) { [self.buttons.lastObject removeFromSuperview]; [self.buttons removeLastObject]; }
-    while (self.buttons.count < items.count) {
-        UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
-        [button addTarget:self action:@selector(select:) forControlEvents:UIControlEventPrimaryActionTriggered];
-        [self.background.contentView addSubview:button];
-        [self.buttons addObject:button];
-    }
-    UITabBarItem *selected = self.tabBar.selectedItem;
-    // Plex colors the selected tab through its bar appearance, not tintColor.
-    UIColor *accent = self.tabBar.standardAppearance.stackedLayoutAppearance.selected.iconColor
-        ?: [UIColor colorWithRed:0.898 green:0.627 blue:0.051 alpha:1];
-    [items enumerateObjectsUsingBlock:^(UITabBarItem *item, NSUInteger i, BOOL *stop) {
-        UIButton *button = self.buttons[i];
-        BOOL isSelected = item == selected;
-        UIImage *image = (isSelected && item.selectedImage) ? item.selectedImage : item.image;
-        [button setImage:[PLXSquareIcon(image) imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate] forState:UIControlStateNormal];
-        button.tintColor = isSelected ? accent : [UIColor colorWithWhite:1 alpha:0.9];
-        button.accessibilityLabel = item.title;
-        button.accessibilityTraits = isSelected ? (UIAccessibilityTraitButton | UIAccessibilityTraitSelected) : UIAccessibilityTraitButton;
-        button.tag = (NSInteger)i;
-    }];
-    [self setNeedsLayout];
-}
-
-- (CGSize)intrinsicContentSize {
-    return CGSizeMake(PLXRailWidth, self.buttons.count * PLXRailButtonHeight + 8);
-}
-
-- (void)layoutSubviews {
-    [super layoutSubviews];
-    self.background.frame = self.bounds;
-    self.background.layer.cornerRadius = PLXRailWidth / 2;
-    NSUInteger selectedIndex = self.tabBar.selectedItem ? [self.tabBar.items indexOfObject:self.tabBar.selectedItem] : NSNotFound;
-    for (UIButton *button in self.buttons) {
-        button.frame = CGRectMake(0, 4 + button.tag * PLXRailButtonHeight, PLXRailWidth, PLXRailButtonHeight);
-    }
-    self.selectionPlatter.hidden = selectedIndex == NSNotFound;
-    if (selectedIndex != NSNotFound) {
-        self.selectionPlatter.frame = CGRectInset(self.buttons[selectedIndex].frame, 3, 3);
-        self.selectionPlatter.layer.cornerRadius = CGRectGetHeight(self.selectionPlatter.frame) / 2;
+- (void)syncSelection {
+    UITabBarItem *selected = self.plexBar.selectedItem;
+    NSUInteger index = selected ? [self.plexBar.items indexOfObject:selected] : NSNotFound;
+    if (index != NSNotFound && index < self.controller.viewControllers.count && self.controller.selectedIndex != index) {
+        self.controller.selectedIndex = index;
     }
 }
 
-- (void)select:(UIButton *)sender {
-    UITabBar *tabBar = self.tabBar;
-    if (sender.tag >= (NSInteger)tabBar.items.count) return;
-    UITabBarItem *item = tabBar.items[sender.tag];
-    tabBar.selectedItem = item;
-    if ([tabBar.delegate respondsToSelector:@selector(tabBar:didSelectItem:)]) {
-        [tabBar.delegate tabBar:tabBar didSelectItem:item];
-    }
-    [self reloadItems];
+- (void)tabBarController:(UITabBarController *)tabBarController didSelectViewController:(UIViewController *)viewController {
+    UITabBar *bar = self.plexBar;
+    NSUInteger index = [tabBarController.viewControllers indexOfObject:viewController];
+    if (!bar || index == NSNotFound || index >= bar.items.count) return;
+    UITabBarItem *item = bar.items[index];
+    if (bar.selectedItem == item) return;
+    bar.selectedItem = item;
+    if ([bar.delegate respondsToSelector:@selector(tabBar:didSelectItem:)]) [bar.delegate tabBar:bar didSelectItem:item];
 }
 
 @end
 
-#pragma mark - Placement
-
-// The edge of the window where the system's vertical bar is showing, or 0.
-static NSInteger PLXVerticalBarEdge(UIView *view) {
-    if (@available(iOS 27.1, *)) return view.window ? view.window.traitCollection.verticalBarEdge : 0;
-    return 0;
+// The view controller whose view contains the tab bar.
+static UIViewController *PLXOwningViewController(UIView *view) {
+    for (UIResponder *r = view.superview; r; r = r.nextResponder) {
+        if ([r isKindOfClass:UIViewController.class]) return (UIViewController *)r;
+    }
+    return nil;
 }
 
-static void PLXLayoutRail(UITabBar *tabBar) {
-    UIView *host = tabBar.superview;
-    UIWindow *window = tabBar.window;
-    PLXTabRail *rail = objc_getAssociatedObject(tabBar, PLXRailKey);
-    NSInteger edge = PLXVerticalBarEdge(tabBar);
-    BOOL useRail = host && window && edge != 0 && tabBar.items.count > 0;
+// The top of the mini player, in the owner's coordinates, so the native bar
+// sits above it instead of underneath. CGFLOAT_MAX when no mini player shows.
+static CGFloat PLXMiniPlayerTop(UIView *owner) {
+    static Class miniPlayerClass;
+    if (!miniPlayerClass) miniPlayerClass = NSClassFromString(@"PMMiniPlayerView");
+    __block CGFloat top = CGFLOAT_MAX;
+    __block void (^visit)(UIView *);
+    __block __weak void (^weakVisit)(UIView *);
+    weakVisit = visit = ^(UIView *v) {
+        if ([v isKindOfClass:miniPlayerClass]) {
+            BOOL shown = !v.hidden && v.alpha > 0.01 && v.window;
+            for (UIView *s = v.superview; shown && s; s = s.superview) if (s.hidden) shown = NO;
+            if (shown) top = MIN(top, [v convertPoint:CGPointZero toView:owner].y);
+            return;
+        }
+        for (UIView *s in v.subviews) weakVisit(s);
+    };
+    if (owner.window) visit(owner.window);
+    return top;
+}
 
-    // Plex hides its tab bar on some screens (the player, full-screen sheets).
-    BOOL plexHidesBar = tabBar.isHidden;
-    if (!useRail) {
-        rail.hidden = YES;
-        if (tabBar.alpha == 0 && objc_getAssociatedObject(tabBar, @selector(alpha))) tabBar.alpha = 1;
-        objc_setAssociatedObject(tabBar, @selector(alpha), nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+static void PLXUpdateNativeTabs(UITabBar *tabBar) {
+    PLXNativeTabs *tabs = objc_getAssociatedObject(tabBar, PLXNativeTabsKey);
+    NSInteger edge = 0;
+    if (@available(iOS 27.1, *)) edge = tabBar.window ? tabBar.window.traitCollection.verticalBarEdge : 0;
+    BOOL useNative = edge != 0 && tabBar.items.count > 0;
+
+    if (!useNative) {
+        tabs.controller.view.hidden = YES;
+        if (objc_getAssociatedObject(tabBar, @selector(alpha))) {
+            tabBar.alpha = 1;
+            objc_setAssociatedObject(tabBar, @selector(alpha), nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
         return;
     }
-    if (!rail) {
-        rail = [[PLXTabRail alloc] initWithTabBar:tabBar];
-        objc_setAssociatedObject(tabBar, PLXRailKey, rail, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    UIViewController *owner = PLXOwningViewController(tabBar);
+    if (!owner) return;
+    if (!tabs) {
+        tabs = [PLXNativeTabs new];
+        tabs.plexBar = tabBar;
+        tabs.controller = [UITabBarController new];
+        tabs.controller.delegate = tabs;
+        objc_setAssociatedObject(tabBar, PLXNativeTabsKey, tabs, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
-    if (rail.superview != host) [host addSubview:rail];
-    [host bringSubviewToFront:rail];
+    UITabBarController *controller = tabs.controller;
+    if (controller.parentViewController != owner) {
+        [controller willMoveToParentViewController:nil];
+        [controller.view removeFromSuperview];
+        [controller removeFromParentViewController];
+        [owner addChildViewController:controller];
+        controller.view.backgroundColor = UIColor.clearColor;
+        PLXMakePassThrough(controller.view);
+        [owner.view addSubview:controller.view];
+        [controller didMoveToParentViewController:owner];
+    }
+    [tabs reloadPagesIfNeeded];
+    [tabs syncSelection];
 
-    // Keep Plex's bar in place for its own layout code, but invisible and untouchable.
+    // Plex's bar stays in place for its own layout code, invisible and untouchable.
     tabBar.alpha = 0;
     objc_setAssociatedObject(tabBar, @selector(alpha), @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    rail.hidden = plexHidesBar;
+    controller.view.hidden = tabBar.isHidden;
 
-    [rail reloadItems];
-    UIEdgeInsets safe = window.safeAreaInsets;
-    BOOL trailing = edge == 2;
-    BOOL rightToLeft = window.effectiveUserInterfaceLayoutDirection == UIUserInterfaceLayoutDirectionRightToLeft;
-    BOOL onRight = trailing != rightToLeft;
-    CGFloat strip = onRight ? safe.right : safe.left;
-    if (strip < PLXRailWidth) strip = PLXRailWidth + 12;
-    CGSize size = rail.intrinsicContentSize;
-    // Horizontal position comes from the host's own width, not window
-    // coordinates: Plex slides the whole content sideways while its side menu
-    // is open, and a window-based position taken then would stick after it closes.
-    CGFloat width = CGRectGetWidth(host.bounds);
-    CGFloat x = onRight ? width - strip + (strip - size.width) / 2 : (strip - size.width) / 2;
-    CGFloat available = CGRectGetHeight(window.bounds) - safe.bottom;
-    CGFloat yInWindow = MAX(PLXRailTopClearance, (available - size.height) / 2);
-    CGFloat hostTop = [host convertPoint:CGPointZero toView:nil].y;
-    rail.frame = CGRectMake(x, yInWindow - hostTop, size.width, size.height);
+    CGRect frame = owner.view.bounds;
+    CGFloat miniPlayerTop = PLXMiniPlayerTop(owner.view);
+    if (miniPlayerTop < CGRectGetMaxY(frame)) frame.size.height = MAX(0, miniPlayerTop - CGRectGetMinY(frame));
+    if (!CGRectEqualToRect(controller.view.frame, frame)) controller.view.frame = frame;
+    if (owner.view.subviews.lastObject != controller.view) [owner.view bringSubviewToFront:controller.view];
 }
 
 static IMP PLXOrigTabBarLayout;
@@ -196,40 +204,46 @@ static IMP PLXOrigTabBarLayout;
 static void PLXTabBarLayoutSubviews(UITabBar *self, SEL _cmd) {
     PLXNormalizeTabImages(self);
     ((void (*)(id, SEL))PLXOrigTabBarLayout)(self, _cmd);
-    PLXLayoutRail(self);
+    PLXUpdateNativeTabs(self);
 }
 
 static IMP PLXOrigTabBarSetHidden;
 
 static void PLXTabBarSetHidden(UITabBar *self, SEL _cmd, BOOL hidden) {
     ((void (*)(id, SEL, BOOL))PLXOrigTabBarSetHidden)(self, _cmd, hidden);
-    PLXTabRail *rail = objc_getAssociatedObject(self, PLXRailKey);
-    if (rail && PLXVerticalBarEdge(self) != 0) rail.hidden = hidden;
+    PLXNativeTabs *tabs = objc_getAssociatedObject(self, PLXNativeTabsKey);
+    if (tabs && objc_getAssociatedObject(self, @selector(alpha))) tabs.controller.view.hidden = hidden;
 }
 
-static BOOL PLXInstallTabBarRail(void) {
+static IMP PLXOrigTabBarSetSelectedItem;
+
+static void PLXTabBarSetSelectedItem(UITabBar *self, SEL _cmd, UITabBarItem *item) {
+    ((void (*)(id, SEL, UITabBarItem *))PLXOrigTabBarSetSelectedItem)(self, _cmd, item);
+    [(PLXNativeTabs *)objc_getAssociatedObject(self, PLXNativeTabsKey) syncSelection];
+}
+
+static IMP PLXReplaceOnClass(Class cls, SEL selector, IMP replacement) {
+    Method method = class_getInstanceMethod(cls, selector);
+    if (class_addMethod(cls, selector, replacement, method_getTypeEncoding(method))) {
+        return method_getImplementation(class_getInstanceMethod(class_getSuperclass(cls), selector));
+    }
+    return method_setImplementation(method, replacement);
+}
+
+static BOOL PLXInstallNativeTabs(void) {
     static BOOL installed;
     if (installed) return YES;
     Class tabBarClass = NSClassFromString(@"PMSafeAreaTabBar");
     if (!tabBarClass) return NO;
     installed = YES;
-    Method layout = class_getInstanceMethod(tabBarClass, @selector(layoutSubviews));
-    if (class_addMethod(tabBarClass, @selector(layoutSubviews), (IMP)PLXTabBarLayoutSubviews, method_getTypeEncoding(layout))) {
-        PLXOrigTabBarLayout = method_getImplementation(class_getInstanceMethod([tabBarClass superclass], @selector(layoutSubviews)));
-    } else {
-        PLXOrigTabBarLayout = method_setImplementation(layout, (IMP)PLXTabBarLayoutSubviews);
-    }
-    Method setHidden = class_getInstanceMethod(tabBarClass, @selector(setHidden:));
-    if (class_addMethod(tabBarClass, @selector(setHidden:), (IMP)PLXTabBarSetHidden, method_getTypeEncoding(setHidden))) {
-        PLXOrigTabBarSetHidden = method_getImplementation(class_getInstanceMethod([tabBarClass superclass], @selector(setHidden:)));
-    } else {
-        PLXOrigTabBarSetHidden = method_setImplementation(setHidden, (IMP)PLXTabBarSetHidden);
-    }
+    PLXOrigTabBarLayout = PLXReplaceOnClass(tabBarClass, @selector(layoutSubviews), (IMP)PLXTabBarLayoutSubviews);
+    PLXOrigTabBarSetHidden = PLXReplaceOnClass(tabBarClass, @selector(setHidden:), (IMP)PLXTabBarSetHidden);
+    PLXOrigTabBarSetSelectedItem = PLXReplaceOnClass(tabBarClass, @selector(setSelectedItem:), (IMP)PLXTabBarSetSelectedItem);
     return YES;
 }
 
-__attribute__((constructor)) static void PLXInstallTabBarRailAtLaunch(void) {
-    if (PLXInstallTabBarRail()) return;
+__attribute__((constructor)) static void PLXInstallNativeTabsAtLaunch(void) {
+    if (PLXInstallNativeTabs()) return;
     [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification object:nil
-        queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) { PLXInstallTabBarRail(); }];
+        queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) { PLXInstallNativeTabs(); }];
 }

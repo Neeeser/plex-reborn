@@ -7,16 +7,26 @@
 #import <objc/runtime.h>
 
 CGRect PLXDeskPostureFold(UIView *view);
+
+@interface UIBarButtonItem (PLXDump)
+@end
+@implementation UIBarButtonItem (PLXDump)
+- (NSString *)debugDescriptionForDump {
+    return [NSString stringWithFormat:@" [item title=%@ ax=%@ image=%@ %@ custom=%@ menu=%d]", self.title, self.accessibilityLabel,
+        NSStringFromCGSize(self.image.size), self.image.isSymbolImage ? @"symbol" : @"bitmap", NSStringFromClass(self.customView.class), self.menu != nil];
+}
+@end
 NSLayoutConstraint *PLXTopEdgeConstraint(UIView *view, UIView *parent);
 
 static void PLXDumpView(UIView *view, NSUInteger depth, NSMutableString *out) {
     CGRect inWindow = view.window ? [view convertRect:view.bounds toView:nil] : view.frame;
-    [out appendFormat:@"%@%@ frame=%@ inWindow=%@%@%@\n",
+    [out appendFormat:@"%@%@ frame=%@ inWindow=%@%@%@%@\n",
         [@"" stringByPaddingToLength:depth * 2 withString:@" " startingAtIndex:0],
         NSStringFromClass(view.class),
         NSStringFromCGRect(view.frame),
         NSStringFromCGRect(inWindow),
         view.hidden ? @" hidden" : @"",
+        ([view isKindOfClass:UINavigationBar.class] ? [[[(UINavigationBar *)view topItem].rightBarButtonItems valueForKey:@"debugDescriptionForDump"] componentsJoinedByString:@" | "] : @""),
         view.layer.sublayers.count ? [NSString stringWithFormat:@" layers=%@", [[view.layer.sublayers valueForKey:@"class"] componentsJoinedByString:@","]] : @""];
     if ([NSStringFromClass(view.class) isEqualToString:@"PMTopPlayerControlsView"]) {
         [out appendFormat:@"  ↳ topConstraint %@ autoresizing=%d\n", PLXTopEdgeConstraint(view, view.superview), view.translatesAutoresizingMaskIntoConstraints];
