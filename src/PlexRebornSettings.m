@@ -367,14 +367,17 @@ static UITableView *PLXFindTable(UIView *view) {
     return nil;
 }
 
-static IMP PLXOrigSettingsViewDidAppear;
+static IMP PLXOrigSettingsViewWillAppear;
 
-static void PLXSettingsViewDidAppear(UIViewController *self, SEL _cmd, BOOL animated) {
-    ((void (*)(id, SEL, BOOL))PLXOrigSettingsViewDidAppear)(self, _cmd, animated);
+// Added before the screen appears; adding it once the screen had appeared
+// pushed Plex's first section down while it was already on screen.
+static void PLXSettingsViewWillAppear(UIViewController *self, SEL _cmd, BOOL animated) {
+    ((void (*)(id, SEL, BOOL))PLXOrigSettingsViewWillAppear)(self, _cmd, animated);
     UITableView *table = PLXFindTable(self.view);
     if (!table || [table.tableHeaderView isKindOfClass:PLXSettingsEntryView.class]) return;
     PLXSettingsEntryView *entry = [[PLXSettingsEntryView alloc] initWithOwner:self];
-    entry.frame = CGRectMake(0, 0, CGRectGetWidth(table.bounds), 76);
+    CGFloat width = CGRectGetWidth(table.bounds) ?: CGRectGetWidth(self.view.bounds);
+    entry.frame = CGRectMake(0, 0, width, 76);
     table.tableHeaderView = entry;
 }
 
@@ -384,11 +387,11 @@ __attribute__((constructor)) static void PLXInstallSettingsEntry(void) {
         Class settings = NSClassFromString(@"PMSettingsViewController");
         if (installed || !settings) return;
         installed = YES;
-        Method m = class_getInstanceMethod(settings, @selector(viewDidAppear:));
-        if (class_addMethod(settings, @selector(viewDidAppear:), (IMP)PLXSettingsViewDidAppear, method_getTypeEncoding(m))) {
-            PLXOrigSettingsViewDidAppear = method_getImplementation(class_getInstanceMethod([settings superclass], @selector(viewDidAppear:)));
+        Method m = class_getInstanceMethod(settings, @selector(viewWillAppear:));
+        if (class_addMethod(settings, @selector(viewWillAppear:), (IMP)PLXSettingsViewWillAppear, method_getTypeEncoding(m))) {
+            PLXOrigSettingsViewWillAppear = method_getImplementation(class_getInstanceMethod([settings superclass], @selector(viewWillAppear:)));
         } else {
-            PLXOrigSettingsViewDidAppear = method_setImplementation(m, (IMP)PLXSettingsViewDidAppear);
+            PLXOrigSettingsViewWillAppear = method_setImplementation(m, (IMP)PLXSettingsViewWillAppear);
         }
     };
     install();
