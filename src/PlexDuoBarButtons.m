@@ -226,7 +226,9 @@ static void PLXApplyToItem(UINavigationItem *navItem, BOOL verticalBar, BOOL use
     NSArray *applied = objc_getAssociatedObject(navItem, PLXProxyKey);
     BOOL rightIsOurs = applied && [right isEqualToArray:applied];
     NSArray *plexRight = rightIsOurs ? originalRight : right;
-    UIBarButtonItem *libraryTabs = verticalBar ? PLXLibraryTabsItemForNavigationItem(navItem) : nil;
+    // Non-nil only while Plex Reborn hides the library's own bar: beside the
+    // vertical bar, or at the bottom edge when the user's own tabs replace it.
+    UIBarButtonItem *libraryTabs = PLXLibraryTabsItemForNavigationItem(navItem);
     BOOL remeasure = NO;
     NSArray *base = plexRight;
     if (useProxies) {

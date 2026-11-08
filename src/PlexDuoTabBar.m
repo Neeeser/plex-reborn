@@ -10,7 +10,8 @@
 // and transparent and pass touches through, so only the system's tab bar is
 // visible and touchable. Choosing a tab goes through Plex's own tab bar and its
 // delegate, so Plex's navigation is unchanged. Without a vertical bar (unfolded
-// portrait) the native bar is hidden and Plex's own bar is used.
+// portrait, other iPhones) Plex's own bar is used, or the user's own tabs in
+// the system's bottom tab bar when they chose their own tabs.
 //
 // Plex's tab images come in different sizes; the floating tab bar draws them at
 // their natural size, so some icons fill the whole button and crowd their
@@ -300,6 +301,8 @@ static void PLXSelectHomeTab(NSString *title) {
 static NSMapTable<UINavigationItem *, UITabBar *> *PLXLibraryBars;
 // The library bar shown as tabs in the vertical bar, which then stand in for the user's own tabs.
 static __weak UITabBar *PLXVerticalLibraryBar;
+// Without a vertical bar, a library's own bar when it is kept at the bottom ("Plex's bottom bar").
+static __weak UITabBar *PLXBottomLibraryBar;
 static const void *PLXLibraryButtonKey = &PLXLibraryButtonKey;
 static const void *PLXLibraryButtonStateKey = &PLXLibraryButtonStateKey;
 
@@ -392,7 +395,12 @@ static void PLXInstallLibraryTabMemory(void) {
 UIBarButtonItem *PLXLibraryTabsItemForNavigationItem(UINavigationItem *navItem) {
     UITabBar *bar = [PLXLibraryBars objectForKey:navItem];
     if (!bar || bar == PLXHomeBar || bar.items.count < 2 || !PLXPlexBarShowing(bar)) return nil;
-    if (PLXSettingInteger(PLXSettingLibraryTabs) != PLXLibraryTabsButton) return nil;
+    // Only while Plex Reborn hides the library's own bar.
+    if (!objc_getAssociatedObject(bar, @selector(alpha))) return nil;
+    // "Vertical bar tabs" needs the vertical bar; without one the tabs use the button too.
+    NSInteger placement = PLXSettingInteger(PLXSettingLibraryTabs), edge = 0;
+    if (@available(iOS 27.1, *)) edge = bar.window ? bar.window.traitCollection.verticalBarEdge : 0;
+    if (placement == PLXLibraryTabsPlexBar || (placement == PLXLibraryTabsVerticalBar && edge != 0)) return nil;
     UIBarButtonItem *button = objc_getAssociatedObject(bar, PLXLibraryButtonKey);
     if (!button) {
         button = [[UIBarButtonItem alloc] initWithImage:nil menu:nil];
@@ -511,9 +519,10 @@ static void PLXReserveVerticalBarColumn(UIViewController *host, UIWindow *window
 static void PLXUpdateCustomTabs(UIWindow *window) {
     NSInteger edge = 0;
     if (@available(iOS 27.1, *)) edge = window ? window.traitCollection.verticalBarEdge : 0;
-    BOOL show = PLXSettingBool(PLXSettingCustomTabBar) && edge != 0 && PLXHomeEntries.count;
+    BOOL show = PLXSettingBool(PLXSettingCustomTabBar) && PLXHomeEntries.count;
     UITabBar *library = PLXVerticalLibraryBar;
-    if (library && PLXPlexBarShowing(library) && PLXSettingInteger(PLXSettingLibraryTabs) == PLXLibraryTabsVerticalBar) show = NO;
+    if (edge != 0 && library && PLXPlexBarShowing(library) && PLXSettingInteger(PLXSettingLibraryTabs) == PLXLibraryTabsVerticalBar) show = NO;
+    if (edge == 0 && PLXBottomLibraryBar && PLXPlexBarShowing(PLXBottomLibraryBar)) show = NO;
     UIViewController *root = window.rootViewController;
     if (!show || !root) { PLXCustom.controller.view.hidden = YES; return; }
     if (!PLXCustom) {
@@ -536,6 +545,8 @@ static void PLXUpdateCustomTabs(UIWindow *window) {
     controller.view.hidden = controller.viewControllers.count == 0;
     PLXReserveVerticalBarColumn(controller, window, edge);
     CGRect frame = root.view.bounds;
+    // The tabs stop above Plex's mini player, which Plex keeps at the bottom
+    // edge below its own tab bar.
     CGFloat miniPlayerTop = PLXMiniPlayerTop(root.view);
     if (miniPlayerTop < CGRectGetMaxY(frame)) frame.size.height = MAX(0, miniPlayerTop);
     if (!CGRectEqualToRect(controller.view.frame, frame)) controller.view.frame = frame;
@@ -574,6 +585,23 @@ static void PLXUpdateNativeTabs(UITabBar *tabBar) {
         return;
     }
     if (!custom) PLXCustom.controller.view.hidden = YES;
+
+    // Without a vertical bar (unfolded portrait, other iPhones), the user's own
+    // tabs show in the system's tab bar at the bottom in place of Plex's bar.
+    // A library's tabs become the menu button in its title bar, unless they
+    // are set to stay in Plex's bottom bar, which then replaces the user's tabs
+    // while the library shows.
+    if (!useNative && custom && tabBar.items.count > 0) {
+        tabs.controller.view.hidden = YES;
+        BOOL keepPlexBar = !isHome && libraryPlacement == PLXLibraryTabsPlexBar;
+        if (keepPlexBar) PLXBottomLibraryBar = tabBar;
+        else if (PLXBottomLibraryBar == tabBar) PLXBottomLibraryBar = nil;
+        tabBar.alpha = keepPlexBar ? 1 : 0;
+        objc_setAssociatedObject(tabBar, @selector(alpha), keepPlexBar ? nil : @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        if (!isHome) PLXRegisterLibraryBar(tabBar);
+        PLXUpdateCustomTabs(tabBar.window);
+        return;
+    }
 
     if (!useNative) {
         tabs.controller.view.hidden = YES;
@@ -631,7 +659,10 @@ static void PLXUpdateNativeTabs(UITabBar *tabBar) {
 static const void *PLXSuppressedInsetKey = &PLXSuppressedInsetKey;
 
 static void PLXUpdatePlexBarInset(UITabBar *bar) {
-    BOOL hidden = objc_getAssociatedObject(bar, @selector(alpha)) != nil && bar.alpha < 0.01 && bar.window;
+    // At the bottom edge the system tab bar takes the hidden bar's place, so the padding stays.
+    NSInteger edge = 0;
+    if (@available(iOS 27.1, *)) edge = bar.window ? bar.window.traitCollection.verticalBarEdge : 0;
+    BOOL hidden = edge != 0 && objc_getAssociatedObject(bar, @selector(alpha)) != nil && bar.alpha < 0.01 && bar.window;
     UIResponder *responder = bar.superview.nextResponder;
     if (![responder isKindOfClass:UIViewController.class]) return;
     for (UIViewController *child in ((UIViewController *)responder).childViewControllers) {
