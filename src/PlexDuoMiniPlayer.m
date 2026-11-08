@@ -168,9 +168,38 @@ static void PLXSetPinInset(NSLayoutConstraint *pin, UIView *miniPlayer, CGFloat 
     PLXSetConstant(pin, value);
 }
 
+static void PLXSetAddedBottomInset(PLXMiniPlayerState *state, CGFloat inset) {
+    UIViewController *nav = state.navigationController;
+    if (!nav || fabs(state.addedBottomInset - inset) < 0.5) return;
+    UIEdgeInsets additional = nav.additionalSafeAreaInsets;
+    additional.bottom += inset - state.addedBottomInset;
+    nav.additionalSafeAreaInsets = additional;
+    state.addedBottomInset = inset;
+}
+
+static const void *PLXContainerOwnerKey = &PLXContainerOwnerKey;
+
+// Plex swaps the mini player view for the other size's view in the same
+// container when the screen's width class changes (PMMiniPlayerView folded,
+// PMMiniPlayerViewFullSize unfolded). The old view's floating card had moved
+// the screens' bottom constraint, so the new view could not find it and stayed
+// Plex's bar. The container remembers which view floats it, and a new view
+// first puts back what the old one changed.
+static void PLXReleaseContainer(UIView *container, PLXMiniPlayerState *state) {
+    PLXMiniPlayerState *owner = objc_getAssociatedObject(container, PLXContainerOwnerKey);
+    if (!owner || owner == state || !owner.floating) return;
+    [NSLayoutConstraint deactivateConstraints:@[owner.navToBottom]];
+    [NSLayoutConstraint activateConstraints:@[owner.navToContainer]];
+    PLXSetAddedBottomInset(owner, 0);
+    PLXMakeContainerPassThrough(container, NO);
+    owner.floating = NO;
+    objc_setAssociatedObject(container, PLXContainerOwnerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
 static BOOL PLXStartFloating(UIView *miniPlayer, PLXMiniPlayerState *state) {
     UIView *container = miniPlayer.superview, *root = container.superview;
     if (!container || !root) return NO;
+    PLXReleaseContainer(container, state);
     NSArray *pins = PLXContainerPins(miniPlayer, container);
     UIView *content = nil;
     NSLayoutConstraint *contentToPlayer = PLXContentToMiniPlayer(container, root, &content);
@@ -212,17 +241,9 @@ static BOOL PLXStartFloating(UIView *miniPlayer, PLXMiniPlayerState *state) {
     miniPlayer.layer.cornerRadius = PLXCardCornerRadius;
     miniPlayer.layer.cornerCurve = kCACornerCurveContinuous;
     PLXMakeContainerPassThrough(container, YES);
+    objc_setAssociatedObject(container, PLXContainerOwnerKey, state, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     state.floating = YES;
     return YES;
-}
-
-static void PLXSetAddedBottomInset(PLXMiniPlayerState *state, CGFloat inset) {
-    UIViewController *nav = state.navigationController;
-    if (!nav || fabs(state.addedBottomInset - inset) < 0.5) return;
-    UIEdgeInsets additional = nav.additionalSafeAreaInsets;
-    additional.bottom += inset - state.addedBottomInset;
-    nav.additionalSafeAreaInsets = additional;
-    state.addedBottomInset = inset;
 }
 
 static void PLXStopFloating(UIView *miniPlayer, PLXMiniPlayerState *state) {
@@ -240,6 +261,8 @@ static void PLXStopFloating(UIView *miniPlayer, PLXMiniPlayerState *state) {
     state.tint.hidden = NO;
     miniPlayer.layer.cornerRadius = 0;
     PLXMakeContainerPassThrough(miniPlayer.superview, NO);
+    if (objc_getAssociatedObject(miniPlayer.superview, PLXContainerOwnerKey) == state)
+        objc_setAssociatedObject(miniPlayer.superview, PLXContainerOwnerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     state.floating = NO;
 }
 
