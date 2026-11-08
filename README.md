@@ -25,19 +25,19 @@ Pick your own bundle ID (for example `com.yourname.plexreborn`) so Plex-Reborn i
 
 ### New Features
 
-- **Hide Plex's online content**: Remove Movies & Shows, Rentals and Discover from the side menu and Home, so you only see your own libraries and the ones shared with you. Watchlist and Live TV stay (Settings > Plex Reborn > Content)
-- **Your own tabs**: Pick up to 5 tabs from Home's tabs and the side menu, such as Home, TV Shows, Movies and Live TV. They show in the tab bar at the bottom, or in the vertical bar on iPhone Duo (Settings > Plex Reborn > Choose my own tabs)
-- **Library tabs menu**: A library's Recommended, Library and Categories become one button with a menu instead of a second tab bar (Settings > Plex Reborn > Layout > Library tabs)
+- **Hide Plex's online content**: Hide Movies & Shows, Rentals, Discover and Plex's free Live TV channels, each on its own switch or all at once, so you only see your own libraries, the ones shared with you, your Watchlist and your server's Live TV. Hidden content leaves the side menu, the More page, Home and the Live TV guide (Settings > Plex Reborn > Plex Online Content)
+- **Your own tabs**: Pick up to 5 tabs from Home's tabs and the side menu, such as Home, TV Shows, Movies and Live TV. They show in the tab bar at the bottom, or in the vertical bar on iPhone Duo (Settings > Plex Reborn > Tabs)
+- **Library tabs menu**: A library's Recommended, Library and Categories become one button with a menu instead of a second tab bar (Settings > Plex Reborn > Tabs > Library tabs)
 - **Remembered library view**: Each library opens on the tab you last picked, such as Library instead of Recommended
 
 ### iPhone Duo
 
 - Video fills the screen on the folded and unfolded screens, with the status bar and home indicator hidden during playback and the controls clear of the camera
-- Half open like a laptop, video plays on the top half with the controls on the bottom half, which shows the video reflected behind them (Settings > Plex Reborn > Layout)
+- Half open like a laptop, video plays on the top half with the controls on the bottom half, which shows the video reflected behind them (Settings > Plex Reborn > Player)
 - Plex's tabs, top bar buttons and library tabs move into the Duo's vertical bar
 - The title bar is clear, hides while scrolling, and the first screen of each tab starts at the top of the screen without a title
-- Poster rows and the Live TV guide run under the vertical bar to the screen edge (Settings > Plex Reborn > Layout)
-- The mini player becomes a floating glass card beside the vertical bar's tabs (Settings > Plex Reborn > Layout > Mini player)
+- Poster rows and the Live TV guide run under the vertical bar to the screen edge (Settings > Plex Reborn > Interface)
+- The mini player becomes a floating glass card beside the vertical bar's tabs (Settings > Plex Reborn > Interface > Mini Player)
 - Plex's own sheets, such as the server picker, reach the screen edge
 - The Duo's second panel is no longer mistaken for an external TV
 
@@ -45,7 +45,7 @@ Pick your own bundle ID (for example `com.yourname.plexreborn`) so Plex-Reborn i
 
 - Release IPAs adopt the signing Apple ID's keychain group at launch so Plex keeps your sign-in; this has not been tested with a second Apple ID yet. If Plex says "Login Credentials Expired" after every launch, open an issue
 - Without a vertical bar (most iPhones, and the Duo unfolded in portrait), the mini player is Plex's full-width bar, not the floating card
-- Hiding Plex's online content covers the side menu and Home; search results can still include Plex's online titles
+- Hiding Plex's online content covers the side menu, the More page, Home and the Live TV guide; search results can still include Plex's online titles
 - With your own tabs, the tab bar's selection does not always follow screens opened from the side menu
 - In desk posture, Home's poster rows run across the crease
 - The email sign-in form is shifted left, and the launch logo is oversized

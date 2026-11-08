@@ -9,14 +9,15 @@ All notable changes to this project will be documented in this file.
 ### Features
 
 - Run **Plex 8.45 on current iPhones** with iOS 26 Liquid Glass bars, by stamping the app for the iOS 27 SDK and adding the scene setup iOS 27 requires
-- Add **Hide Plex's online content**, which removes Movies & Shows, Rentals and Discover from the side menu and Home while keeping your libraries, Watchlist and Live TV
-  - Off by default, under Settings → Plex Reborn → Content; turning it on or off takes effect right away
+- Add **Plex Online Content** settings to hide Movies & Shows, Rentals, Discover and Plex's free Live TV channels, each on its own switch or all at once, so you see only your libraries, the ones shared with you, your Watchlist and your server's Live TV
+  - Hidden content leaves the side menu, the More page and Home, and Plex's channels leave the Live TV guide; changes take effect right away
+  - Off by default, under Settings → Plex Reborn → Plex Online Content
 - Add **your own tabs**: pick up to 5 tabs from Home's tabs and the side menu
-  - They show in the tab bar at the bottom, or in the vertical bar on iPhone Duo (Settings → Plex Reborn → Choose my own tabs)
+  - They show in the tab bar at the bottom, or in the vertical bar on iPhone Duo (Settings → Plex Reborn → Tabs)
 - Show a library's **Recommended, Library and Categories** as one menu button instead of a second tab bar, and open each library on the tab you last picked
 - Ship a **ready-to-sign IPA** with each release, which adopts the signing Apple ID's keychain group so Plex can keep your sign-in
 - Hide **scroll bars** throughout the app
-- Add a **Plex Reborn page** to Plex's Settings, there when Settings opens
+- Add a **Plex Reborn page** to Plex's Settings, there when Settings opens, with pages for Tabs, Plex Online Content, Interface and Player
 
 ### iPhone Duo
 
