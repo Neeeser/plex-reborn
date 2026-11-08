@@ -9,6 +9,8 @@ First working build, not yet released.
 - The player's progress bar spans the full screen width. Folded in landscape the top bar reaches the edge when the camera is in the bottom corner; elsewhere it stays clear of the camera and status bar, and the bottom row of controls uses the full width.
 - Unfolded, the vertical bar's tabs line up with its buttons instead of running off the screen edge, and the mini player is the floating card too.
 - The clear title bar no longer flickers while scrolling an episode's page.
+- Opening a page no longer shows Plex's gray title bar and buttons while the page slides in.
+- The Live TV guide runs under the vertical bar to the screen edge.
 - The Duo's vertical status bar and the home indicator hide during video.
 - One tap shows the player controls on the first try.
 - The Duo's second panel is no longer treated as an external TV, which fixes taps and the status bar when unfolded.

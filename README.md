@@ -19,7 +19,7 @@ Tested on iPhone Duo (iOS 27.2) and the iPhone Duo simulator.
 | Top bar buttons and library tabs in the vertical bar | Works | Works in landscape | not tested | not tested |
 | Clear title bar that hides while scrolling | Works | Works in landscape | not tested | not tested |
 | Video reflected below the crease | n/a | n/a | n/a | Works |
-| Live TV controls fit | Works | Works | not tested | not tested |
+| Live TV controls fit; guide runs under the vertical bar | Works (guide edge not yet tested folded) | Works | not tested | not tested |
 | Floating mini player card; sheets reach the edge | Works | Works in landscape | not tested | not tested |
 | Installs beside App Store Plex | Works | | | |
 
@@ -40,6 +40,7 @@ Tested on iPhone Duo (iOS 27.2) and the iPhone Duo simulator.
 | Top bar buttons | `src/PlexDuoBarButtons.m` | Moves Plex's side menu, cast, search and more buttons into the vertical bar |
 | Title bar | `src/PlexDuoTitleBar.m` | Clear title bar that hides while scrolling |
 | Posters under the bar | `src/PlexDuoContentUnderBar.m` | Poster rows scroll under the vertical bar |
+| Live TV guide | `src/PlexDuoLiveTV.m` | The guide runs under the vertical bar to the screen edge |
 | Mini player | `src/PlexDuoMiniPlayer.m` | Floating glass card, full-width bar or Plex's bar |
 | Settings | `src/PlexRebornSettings.m` | The Plex Reborn page in Plex's Settings |
 | Sheets | `src/PlexDuoSheets.m` | Plex's own sheets reach the screen edge beside the vertical bar |
