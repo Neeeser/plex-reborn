@@ -15,9 +15,9 @@ fi
 DEVICE_APP="$PROJ/work/device/Payload/PlexMobile.app"
 SIM_APP="$PROJ/work/simulator/PlexMobile.app"
 
-# The test copy installs beside App Store Plex and the plain Plex Legacy copy.
+# The development copy installs beside App Store Plex under its own bundle ID.
 TEST_BUNDLE_ID="${TEST_BUNDLE_ID:-$BUNDLE_PREFIX.plexlegacy.duotest}"
-TEST_DISPLAY_NAME="${TEST_DISPLAY_NAME:-Plex Duo Test}"
+TEST_DISPLAY_NAME="${TEST_DISPLAY_NAME:-Plex Reborn}"
 
 # Name of the add-on library inside the app's Frameworks folder.
 SHIM_NAME="PlexDuoShim.dylib"
