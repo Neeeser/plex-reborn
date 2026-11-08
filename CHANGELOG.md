@@ -38,5 +38,7 @@ All notable changes to this project will be documented in this file.
 - Fix **title bar flicker** while scrolling an episode's page, and Plex's gray title bar flashing while a page slides in
 - Make **one tap** show the player controls on the first try
 - Stop **Live TV controls** overlapping on the folded screen
+- Show **channel logos and show art** from Live TV & DVR sources that serve artwork on the local network, such as ErsatzTV; Plex Media Server refuses to resize those images, so they were blank
+- Keep **your own tabs** when Plex's Home has a single tab, which happens when Plex's online media sources are turned off for the account
 
 [v1.0.0]: https://github.com/Neeeser/plex-reborn/releases/tag/v8.45_1.0.0

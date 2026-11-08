@@ -105,6 +105,7 @@ The add-on's source is in `src/`:
 | Live TV guide | `src/PlexDuoLiveTV.m` | The guide runs under the vertical bar to the screen edge |
 | Mini player | `src/PlexDuoMiniPlayer.m` | Floating glass card, full-width bar or Plex's bar |
 | Online content | `src/PlexHideOnlineContent.m` | Hides Plex's online sources from the side menu and Home |
+| Local artwork | `src/PlexLocalImages.m` | Loads artwork from local-network addresses (such as an IPTV tool's channel logos) directly, which Plex Media Server will not resize |
 | Keychain | `src/PlexKeychainPrefix.m` | Uses the signing team's keychain group, so release IPAs keep their sign-in |
 | Settings | `src/PlexRebornSettings.m` | The Plex Reborn page in Plex's Settings |
 | Sheets | `src/PlexDuoSheets.m` | Plex's own sheets reach the screen edge beside the vertical bar |
