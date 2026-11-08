@@ -15,12 +15,13 @@ Tested on iPhone Duo (iOS 27.2) and the iPhone Duo simulator.
 | One tap shows the player controls | Works | Works | Works | Works |
 | Status bar hides with the controls | Works | Works | Works | Works |
 | Controls on the lower half | n/a | n/a | n/a | Works |
+| Tabs in the Duo's vertical bar | Works | Works in landscape | n/a | n/a |
+| Live TV controls fit | Works | Works | not tested | not tested |
+| Mini player and sheets use the full width | Works | Works in landscape | not tested | not tested |
 | Installs beside App Store Plex | Works | | | |
 
 ## Known problems
 
-- Live TV controls on the folded screen in portrait overlap: the programme labels run into each other and two buttons draw on top of each other.
-- The bottom tab bar (Home, Trending, Activity, Find Friends, My Profile) stays horizontal instead of moving to the Duo's vertical bar, and some of its icons are too large for their labels.
 - In desk posture the Home screen's poster rows run across the crease.
 - The email sign-in form is shifted left, and the launch logo is oversized.
 
@@ -30,7 +31,10 @@ Tested on iPhone Duo (iOS 27.2) and the iPhone Duo simulator.
 |---|---|---|
 | Scene support | `src/PlexDuoShim.m` | Scene delegate that hosts Plex's old app-delegate windows; required for apps built against the iOS 27 SDK |
 | Screen handling | `src/PlexDuoScreens.m` | Hides the Duo's second panel from Plex so it does not treat it as an external TV |
-| Player | `src/PlexDuoVideo.m` | Full-screen video, status bar and home indicator hiding, tap fix, control size, desk-posture split |
+| Player | `src/PlexDuoVideo.m` | Full-screen video, status bar and home indicator hiding, tap fix, desk-posture split |
+| Tab bar | `src/PlexDuoTabBar.m` | Tabs as a rail in the Duo's vertical bar; same-size tab icons |
+| Mini player | `src/PlexDuoMiniPlayer.m` | Uses the full width and centers its row when the vertical bar shows |
+| Sheets | `src/PlexDuoSheets.m` | Plex's own sheets reach the screen edge beside the vertical bar |
 | Debugging | `src/PlexViewDump.m` | Writes the view tree on request; left out of release builds |
 | Simulator only | `src/PlexSim*.m`, `src/PlexSim*.c` | Lets the patched app run in the Duo simulator; compile to nothing on devices |
 

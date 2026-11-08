@@ -156,24 +156,6 @@ __attribute__((constructor)) static void PLXInstallPlayerBarHiding(void) {
         queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) { install(); }];
 }
 
-// Player controls on the Duo.
-//
-// Plex picks its compact (phone) controls whenever the horizontal size class
-// is compact. The unfolded Duo is 466 pt wide, so it gets the compact layout,
-// whose transport row is taller than the space Plex reserves and ends up below
-// the screen: only the scrubber and title show, with no play/pause buttons.
-// Screens this large get the full controls instead; small screens (the folded
-// outer display, regular iPhones) keep the compact ones.
-static const CGFloat PLXFullControlsMinimumShortSide = 400.0;
-
-static IMP PLXOrigSetControlsCompact;
-
-static void PLXSetControlsCompact(UIViewController *self, SEL _cmd, BOOL compact) {
-    CGSize size = self.view.bounds.size;
-    if (compact && MIN(size.width, size.height) >= PLXFullControlsMinimumShortSide) compact = NO;
-    ((void (*)(id, SEL, BOOL))PLXOrigSetControlsCompact)(self, _cmd, compact);
-}
-
 // Plex opens the player believing its controls are visible while they are
 // actually transparent, so the first tap "hides" them and nothing appears.
 // When a tap finds the controls invisible and they are still invisible after
@@ -212,9 +194,7 @@ __attribute__((constructor)) static void PLXInstallPlayerControlFixes(void) {
         Class player = NSClassFromString(@"PMVideoPlayerViewController");
         if (installed || !player) return;
         installed = YES;
-        Method compact = class_getInstanceMethod(player, NSSelectorFromString(@"setControlsViewCompact:"));
         Method toggle = class_getInstanceMethod(player, NSSelectorFromString(@"toggleControlsHidden"));
-        if (compact) PLXOrigSetControlsCompact = method_setImplementation(compact, (IMP)PLXSetControlsCompact);
         if (toggle) PLXOrigToggleControlsHidden = method_setImplementation(toggle, (IMP)PLXToggleControlsHidden);
     };
     install();
