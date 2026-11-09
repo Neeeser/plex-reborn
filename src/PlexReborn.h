@@ -44,6 +44,9 @@ NSInteger PLXSettingInteger(NSString *key);
 // navigation item, or nil when that screen has none or another placement is chosen.
 UIBarButtonItem *PLXLibraryTabsItemForNavigationItem(UINavigationItem *item);
 
+// YES for the library tabs button Plex Reborn adds, which is never one of Plex's own buttons.
+BOOL PLXIsLibraryTabsButton(UIBarButtonItem *item);
+
 // The mini player is a floating card, so content and the vertical bar's tabs run past it.
 BOOL PLXMiniPlayerFloats(UIView *miniPlayer);
 

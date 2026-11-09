@@ -403,6 +403,12 @@ static void PLXInstallLibraryTabMemory(void) {
     if (update) PLXOrigLibraryModelUpdate = method_setImplementation(update, (IMP)PLXLibraryModelDidUpdate);
 }
 
+static const void *PLXLibraryButtonMarkKey = &PLXLibraryButtonMarkKey;
+
+BOOL PLXIsLibraryTabsButton(UIBarButtonItem *item) {
+    return objc_getAssociatedObject(item, PLXLibraryButtonMarkKey) != nil;
+}
+
 UIBarButtonItem *PLXLibraryTabsItemForNavigationItem(UINavigationItem *navItem) {
     UITabBar *bar = [PLXLibraryBars objectForKey:navItem];
     if (!bar || bar == PLXHomeBar || bar.items.count < 2 || !PLXPlexBarShowing(bar)) return nil;
@@ -415,6 +421,7 @@ UIBarButtonItem *PLXLibraryTabsItemForNavigationItem(UINavigationItem *navItem) 
     UIBarButtonItem *button = objc_getAssociatedObject(bar, PLXLibraryButtonKey);
     if (!button) {
         button = [[UIBarButtonItem alloc] initWithImage:nil menu:nil];
+        objc_setAssociatedObject(button, PLXLibraryButtonMarkKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         objc_setAssociatedObject(bar, PLXLibraryButtonKey, button, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     UITabBarItem *selected = bar.selectedItem ?: bar.items.firstObject;

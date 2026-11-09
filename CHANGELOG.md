@@ -42,6 +42,7 @@ All notable changes to this project will be documented in this file.
 - Show **channel logos and show art** from Live TV & DVR sources that serve artwork on the local network, such as ErsatzTV; Plex Media Server refuses to resize those images, so they were blank
 - Remove the **empty band under the player's bottom controls**, which came from Plex counting the bottom safe area twice
 - Keep the player's **top buttons clear of the status bar** on the unfolded screen in portrait
+- Stop the **library tabs button repeating** in the title bar's menu on iPhones without the Duo's vertical bar
 - Stop **streams restarting** when one of Plex's 30-second keep-alive checks fails, which over Plex's relay happened every few minutes and showed as a pause, a reload and a reset zoom; a failed check is now retried on a fresh connection, and the stream restarts only if the server has really ended it
 - Keep **your own tabs** when Plex's Home has a single tab, which happens when Plex's online media sources are turned off for the account
 
