@@ -193,13 +193,17 @@ static void PLXUpdateTopButtons(UIView *topBar, BOOL glass) {
 // shows again in the bottom 13 pt when they appear, so the panel stops above it.
 static const CGFloat PLXPanelGapAboveHomeIndicator = 20;
 
-// Plex pins its bottom controls to the bottom of the safe area and adds more
-// space below the last row inside them, which leaves the panel about 45 pt
-// above the screen's bottom edge. In glass mode the controls move down so the
-// panel sits PLXPanelGapAboveHomeIndicator above the edge.
+// Plex pins its bottom controls to the bottom of the safe area, and inside
+// them leaves its bottom layout margin plus 18 pt below the last row, which
+// put the panel about 45 pt above the screen's bottom edge. In glass mode the
+// controls move down so the panel sits PLXPanelGapAboveHomeIndicator above
+// the edge. The drop is worked out from sizes rather than on-screen
+// positions, since Plex slides the controls off the bottom of the screen to
+// hide them.
 static const void *PLXControlsBottomPinKey = &PLXControlsBottomPinKey;
 
-static void PLXSetControlsDrop(UIView *wrapper, CGFloat panelBottomInWindow, BOOL glass) {
+static void PLXSetControlsDrop(UIView *controls, CGFloat emptyBelowContent, BOOL glass) {
+    UIView *wrapper = controls.superview;
     UIView *player = wrapper.superview.superview;
     NSLayoutConstraint *pin = objc_getAssociatedObject(wrapper, PLXControlsBottomPinKey);
     if (!pin) {
@@ -209,15 +213,14 @@ static void PLXSetControlsDrop(UIView *wrapper, CGFloat panelBottomInWindow, BOO
         if (!pin) return;
         objc_setAssociatedObject(wrapper, PLXControlsBottomPinKey, pin, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
-    CGFloat safeBottom = player.safeAreaInsets.bottom;
     CGFloat wanted = 0;
-    if (glass && wrapper.window) {
-        CGFloat gap = CGRectGetMaxY(wrapper.window.bounds) - panelBottomInWindow;
+    if (glass) {
+        CGFloat safeBottom = player.safeAreaInsets.bottom;
         CGFloat target = safeBottom > 0 ? PLXPanelGapAboveHomeIndicator : PLXPanelScreenInset;
-        // The panel's position already includes the current drop, so adjust it by the difference.
-        wanted = MIN(MAX(pin.constant + gap - target, 0), safeBottom + PLXPanelGapAboveHomeIndicator);
+        // Panel bottom = screen bottom - safeBottom + drop - emptyBelowContent + padding; solve for the drop.
+        wanted = MAX(safeBottom - target + emptyBelowContent - PLXPanelPaddingBottom, 0);
     }
-    if (fabs(pin.constant - wanted) > 1) pin.constant = wanted;
+    if (fabs(pin.constant - wanted) > 0.5) pin.constant = wanted;
 }
 
 // Plex's progress bar has square ends. In glass mode each part of the track
@@ -252,15 +255,14 @@ static void PLXUpdateBottomPanel(UIView *controls) {
     CGRect content = PLXVisibleContentFrame(controls, controls);
     if (!glass || CGRectIsNull(content)) {
         PLXHideGlass(container);
-        PLXSetControlsDrop(wrapper, 0, NO);
+        PLXSetControlsDrop(controls, 0, NO);
         return;
     }
     BOOL sliderShown = slider && !slider.hidden;
     UIEdgeInsets outset = UIEdgeInsetsMake(sliderShown ? PLXPanelPaddingTop : PLXPanelPaddingTop - CGRectGetMinY(content), PLXPanelPaddingX,
                                            CGRectGetMaxY(content) + PLXPanelPaddingBottom - CGRectGetHeight(controls.bounds), PLXPanelPaddingX);
     PLXPinGlass(PLXGlassFor(container), container, wrapper, sliderShown ? slider : controls, controls, outset, 26);
-    CGFloat panelBottom = [controls convertPoint:CGPointMake(0, CGRectGetMaxY(content) + PLXPanelPaddingBottom) toView:nil].y;
-    PLXSetControlsDrop(wrapper, panelBottom, YES);
+    PLXSetControlsDrop(controls, CGRectGetHeight(controls.bounds) - CGRectGetMaxY(content), YES);
 }
 
 void PLXUpdatePlayerControls(UIView *player) {
