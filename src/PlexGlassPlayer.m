@@ -27,6 +27,8 @@ static const CGFloat PLXPanelPaddingBottom = 8;
 static const CGFloat PLXPlexControlsInset = 10;
 
 static const void *PLXGlassKey = &PLXGlassKey;
+// Plex's own color for the tint under its bottom blur.
+static const void *PLXPlexTintKey = &PLXPlexTintKey;
 
 static UIVisualEffect *PLXGlassEffect(void) {
     if (@available(iOS 26.0, *)) return [UIGlassEffect effectWithStyle:UIGlassEffectStyleRegular];
@@ -48,15 +50,21 @@ static UIVisualEffectView *PLXGlassFor(id owner) {
 
 static const void *PLXGlassPinsKey = &PLXGlassPinsKey;
 
-// Puts `glass` at the back of `parent` and pins its sides to `sides`, its top
+// Puts `glass` just above `above` in `parent` (at the back when `above` is
+// nil) and pins its sides to `sides`, its top
 // to `top` and its bottom to `bottom`, grown by `outset`. Constraints keep the
 // glass on its buttons when Plex moves them without laying them out again,
 // as it does when the screen rotates.
-static void PLXPinGlass(UIVisualEffectView *glass, UIView *parent, UIView *sides, UIView *top, UIView *bottom,
+static void PLXPinGlass(UIVisualEffectView *glass, UIView *parent, UIView *above, UIView *sides, UIView *top, UIView *bottom,
                         UIEdgeInsets outset, CGFloat radius) {
     if (glass.superview != parent) {
         [glass removeFromSuperview];
         [parent insertSubview:glass atIndex:0];
+    }
+    if (above.superview == parent) {
+        if ([parent.subviews indexOfObject:glass] != [parent.subviews indexOfObject:above] + 1) {
+            [parent insertSubview:glass aboveSubview:above];
+        }
     } else if (parent.subviews.firstObject != glass) {
         [parent sendSubviewToBack:glass];
     }
@@ -184,7 +192,7 @@ static void PLXUpdateTopButtons(UIView *topBar, BOOL glass) {
         }
         if (!glass || !shown || item.hidden) { PLXHideGlass(item); continue; }
         CGFloat height = CGRectGetHeight(item.bounds) ?: 44;
-        PLXPinGlass(PLXGlassFor(item), content, item, item, item, UIEdgeInsetsZero, height / 2);
+        PLXPinGlass(PLXGlassFor(item), content, nil, item, item, item, UIEdgeInsetsZero, height / 2);
     }
 }
 
@@ -241,6 +249,18 @@ static void PLXRoundProgressBar(UIView *slider, BOOL glass) {
     }
 }
 
+// Plex's tint under its bottom blur: a plain view beside the controls'
+// wrapper with a see-through background.
+static UIView *PLXPlexTint(UIView *container, UIView *wrapper) {
+    for (UIView *view in container.subviews) {
+        if (view == wrapper || view.class != UIView.class) continue;
+        if (objc_getAssociatedObject(view, PLXPlexTintKey)) return view;
+        CGFloat alpha = CGColorGetAlpha(view.backgroundColor.CGColor);
+        if (view.backgroundColor && alpha > 0 && alpha < 1) return view;
+    }
+    return nil;
+}
+
 // The glass panel behind the bottom controls: from just above the progress
 // bar to just below the last row that shows, across the controls' column.
 static void PLXUpdateBottomPanel(UIView *controls) {
@@ -261,7 +281,9 @@ static void PLXUpdateBottomPanel(UIView *controls) {
     BOOL sliderShown = slider && !slider.hidden;
     UIEdgeInsets outset = UIEdgeInsetsMake(sliderShown ? PLXPanelPaddingTop : PLXPanelPaddingTop - CGRectGetMinY(content), PLXPanelPaddingX,
                                            CGRectGetMaxY(content) + PLXPanelPaddingBottom - CGRectGetHeight(controls.bounds), PLXPanelPaddingX);
-    PLXPinGlass(PLXGlassFor(container), container, wrapper, sliderShown ? slider : controls, controls, outset, 26);
+    // Above Plex's tint, which would otherwise darken the panel from the top
+    // of the progress bar down.
+    PLXPinGlass(PLXGlassFor(container), container, PLXPlexTint(container, wrapper), wrapper, sliderShown ? slider : controls, controls, outset, 26);
     PLXSetControlsDrop(controls, CGRectGetHeight(controls.bounds) - CGRectGetMaxY(content), YES);
 }
 
@@ -299,6 +321,22 @@ void PLXUpdatePlayerControls(UIView *player) {
             if (![view isKindOfClass:UIVisualEffectView.class] || view == objc_getAssociatedObject(container, PLXGlassKey)) continue;
             if (view.hidden != glass) view.hidden = glass;
         }
+    }
+
+    // Until the video's first frame, Plex shows the poster behind two dims: a
+    // 50% one above the bottom controls and a 60% tint under its blur below
+    // them. With the blur hidden, the step between the two shows as a line
+    // across the screen at the top of the progress bar, so the tint uses the
+    // upper dim's 50% while glass controls are on.
+    UIView *tint = PLXPlexTint(container, wrapper);
+    if (tint) {
+        UIColor *plexColor = objc_getAssociatedObject(tint, PLXPlexTintKey);
+        if (!plexColor) {
+            plexColor = tint.backgroundColor;
+            objc_setAssociatedObject(tint, PLXPlexTintKey, plexColor, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+        UIColor *wanted = glass ? [plexColor colorWithAlphaComponent:0.5] : plexColor;
+        if (![tint.backgroundColor isEqual:wanted]) tint.backgroundColor = wanted;
     }
 }
 
