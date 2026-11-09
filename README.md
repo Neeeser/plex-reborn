@@ -106,6 +106,7 @@ The add-on's source is in `src/`:
 | Mini player | `src/PlexDuoMiniPlayer.m` | Floating glass card, full-width bar or Plex's bar |
 | Online content | `src/PlexHideOnlineContent.m` | Hides Plex's online sources from the side menu and Home |
 | Local artwork | `src/PlexLocalImages.m` | Loads artwork from local-network addresses (such as an IPTV tool's channel logos) directly, which Plex Media Server will not resize |
+| Stream keep-alive | `src/PlexStreamKeepAlive.m` | Retries a failed transcode keep-alive check on a fresh connection before Plex restarts the stream |
 | Keychain | `src/PlexKeychainPrefix.m` | Uses the signing team's keychain group, so release IPAs keep their sign-in |
 | Settings | `src/PlexRebornSettings.m` | The Plex Reborn page in Plex's Settings |
 | Sheets | `src/PlexDuoSheets.m` | Plex's own sheets reach the screen edge beside the vertical bar |
