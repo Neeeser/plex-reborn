@@ -210,13 +210,13 @@ static void PLXPinBottomControls(UIView *player, BOOL toEdges) {
 // plus the safe area. Unfolded in landscape, the safe area also reserves space
 // across the top although the status bar sits only in the side strip, which
 // pushed the whole bar down. The bar's margins are set here instead: Plex's
-// own margins, plus the side insets where the bar has to stay clear of the
+// own margins, plus the side insets, which keep the bar clear of the
 // strip. Unfolded in portrait there is no side strip: the status bar shows in
 // the top right corner, inside the top inset, so the bar stays below it; the
 // picture is letterboxed there, so this costs no video.
 static const void *PLXTopBarMarginsKey = &PLXTopBarMarginsKey;
 
-static void PLXSetTopBarMargins(UIView *bar, UIEdgeInsets safe, BOOL keepSides, BOOL desk) {
+static void PLXSetTopBarMargins(UIView *bar, UIEdgeInsets safe, BOOL desk) {
     NSValue *stored = objc_getAssociatedObject(bar, PLXTopBarMarginsKey);
     if (!stored) {
         stored = [NSValue valueWithUIEdgeInsets:bar.layoutMargins];
@@ -224,10 +224,8 @@ static void PLXSetTopBarMargins(UIView *bar, UIEdgeInsets safe, BOOL keepSides, 
     }
     UIEdgeInsets plex = stored.UIEdgeInsetsValue;
     UIEdgeInsets margins = UIEdgeInsetsMake(plex.top, plex.left, plex.bottom, plex.right);
-    if (keepSides) {
-        margins.left += safe.left;
-        margins.right += safe.right;
-    }
+    margins.left += safe.left;
+    margins.right += safe.right;
     // In desk posture the bar already sits below the crease, away from the status bar.
     BOOL statusBarAbove = !desk && safe.top > 0 && safe.left == 0 && safe.right == 0;
     if (statusBarAbove) margins.top += safe.top;
@@ -276,17 +274,15 @@ static void PLXPlaybackLayoutSubviews(UIView *self, SEL _cmd) {
     static Class topControlsClass;
     if (!topControlsClass) topControlsClass = NSClassFromString(@"PMTopPlayerControlsView");
     UIView *parent = self.superview;
-    // The Duo reserves an 84-pt strip on one side for its vertical status bar.
-    // The status bar shows at the top of that strip, beside the top bar,
-    // whenever the screen has regular height (unfolded, or folded portrait).
-    // Folded landscape has compact height and no status bar, but the camera
-    // sits in the strip: level with the top bar when the strip is on the
-    // left, in the bottom corner when it is on the right. Only that last case
-    // lets the top bar span the full width.
+    // The Duo reserves an 84-pt strip on one side for its vertical status bar,
+    // which shows at the top of that strip whenever the player's controls
+    // show, in every pose (iOS 27.2 shows it in folded landscape too, which
+    // put the clock over the close button). In folded landscape the camera
+    // also sits in the strip, level with the top bar on the left or in the
+    // bottom corner on the right. The top bar always stays clear of the strip.
     UIEdgeInsets safe = parent.safeAreaInsets;
     BOOL compactHeight = parent.traitCollection.verticalSizeClass == UIUserInterfaceSizeClassCompact;
     BOOL cameraBottomRight = compactHeight && safe.right > 0 && safe.left == 0;
-    BOOL topBarFullWidth = cameraBottomRight;
     // The bottom row (time labels, transport buttons, more) is clear of both
     // the status bar and the camera everywhere except beside a bottom-corner camera.
     if (parent) PLXPinBottomControls(parent, !cameraBottomRight);
@@ -294,7 +290,7 @@ static void PLXPlaybackLayoutSubviews(UIView *self, SEL _cmd) {
         if (![bar isKindOfClass:topControlsClass]) continue;
         CGFloat shift = desk ? CGRectGetMaxY([self convertRect:fold toView:parent]) : 0;
         PLXShiftTopEdge(bar, parent, shift);
-        PLXSetTopBarMargins(bar, safe, !topBarFullWidth, desk);
+        PLXSetTopBarMargins(bar, safe, desk);
     }
     if (parent) PLXPinProgressBarToEdges(parent);
     if (CGRectGetHeight(self.bounds) > 200) PLXUpdatePlayerControls(parent);

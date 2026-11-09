@@ -46,6 +46,7 @@ All notable changes to this project will be documented in this file.
 - Keep the **end of long pages** clear of the tab bar on iPhones without the Duo's vertical bar; the last row stayed behind it
 - Mark tabs Plex **can't show right now** (such as Live TV on an account without it) in the Tabs setting, and line up rows without an icon
 - Stop the **library tabs button repeating** in the title bar's menu on iPhones without the Duo's vertical bar
+- Keep the player's **close button clear of the clock** in folded landscape on iPhone Duo
 - Stop **streams restarting** when one of Plex's 30-second keep-alive checks fails, which over Plex's relay happened every few minutes and showed as a pause, a reload and a reset zoom; a failed check is now retried on a fresh connection, and the stream restarts only if the server has really ended it
 - Keep **your own tabs** when Plex's Home has a single tab, which happens when Plex's online media sources are turned off for the account
 
