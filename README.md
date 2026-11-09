@@ -29,6 +29,7 @@ Pick your own bundle ID (for example `com.yourname.plexreborn`) so Plex-Reborn i
 - **Your own tabs**: Pick up to 5 tabs from Home's tabs and the side menu, such as Home, TV Shows, Movies and Live TV. They show in the tab bar at the bottom, or in the vertical bar on iPhone Duo (Settings > Plex Reborn > Tabs)
 - **Library tabs menu**: A library's Recommended, Library and Categories become one button with a menu instead of a second tab bar (Settings > Plex Reborn > Tabs > Library tabs)
 - **Remembered library view**: Each library opens on the tab you last picked, such as Library instead of Recommended
+- **Glass player controls**: The player's buttons sit on glass over the video instead of Plex's gray bars, with the bottom controls in one panel sized to the controls. Every control stays where it was (Settings > Plex Reborn > Player > Glass controls)
 
 ### iPhone Duo
 
@@ -98,6 +99,7 @@ The add-on's source is in `src/`:
 | Scene support | `src/PlexDuoShim.m` | Scene delegate that hosts Plex's app-delegate windows; required for apps built against the iOS 27 SDK |
 | Screen handling | `src/PlexDuoScreens.m` | Hides the Duo's second panel from Plex so it does not treat it as an external TV |
 | Player | `src/PlexDuoVideo.m` | Full-screen video, status bar and home indicator hiding, tap fix, desk-posture split and reflection |
+| Glass controls | `src/PlexGlassPlayer.m` | Glass behind the player's top buttons and bottom controls in place of Plex's gray bars; removes the empty band Plex leaves under the bottom controls |
 | Tab bar | `src/PlexDuoTabBar.m` | Plex's tabs in the system tab bar or the Duo's vertical bar; your own tabs; library tabs as a menu; remembered library tab |
 | Top bar buttons | `src/PlexDuoBarButtons.m` | Moves Plex's side menu, cast, search and more buttons into the vertical bar |
 | Title bar | `src/PlexDuoTitleBar.m` | Clear title bar that hides while scrolling; no title on each tab's first screen |

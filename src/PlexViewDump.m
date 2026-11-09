@@ -65,6 +65,14 @@ static void PLXDumpView(UIView *view, NSUInteger depth, NSMutableString *out) {
                 NSStringFromClass(layer.class), NSStringFromCGRect(layer.frame), layer.hidden, layer.backgroundColor ? [UIColor colorWithCGColor:layer.backgroundColor] : @"none"];
         }
     }
+    for (CALayer *layer in view.layer.sublayers) {
+        if (![layer isKindOfClass:CAGradientLayer.class]) continue;
+        CAGradientLayer *gradient = (CAGradientLayer *)layer;
+        NSMutableArray *colors = [NSMutableArray array];
+        for (id color in gradient.colors) [colors addObject:[UIColor colorWithCGColor:(__bridge CGColorRef)color].description];
+        [out appendFormat:@"%@  ↳ gradient frame=%@ hidden=%d opacity=%.2f colors=%@ locations=%@\n", [@"" stringByPaddingToLength:depth * 2 withString:@" " startingAtIndex:0],
+            NSStringFromCGRect(layer.frame), layer.hidden, layer.opacity, [colors componentsJoinedByString:@" | "], [gradient.locations componentsJoinedByString:@","]];
+    }
     for (UIGestureRecognizer *recognizer in view.gestureRecognizers) {
         [out appendFormat:@"%@  ↳ gesture %@ enabled=%d state=%ld delegate=%@ targets=%@\n",
             [@"" stringByPaddingToLength:depth * 2 withString:@" " startingAtIndex:0],

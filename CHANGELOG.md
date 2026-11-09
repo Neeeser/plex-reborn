@@ -17,6 +17,7 @@ All notable changes to this project will be documented in this file.
 - Show a library's **Recommended, Library and Categories** as one menu button instead of a second tab bar, and open each library on the tab you last picked
 - Ship a **ready-to-sign IPA** with each release, which adopts the signing Apple ID's keychain group so Plex can keep your sign-in
 - Hide **scroll bars** throughout the app
+- Add **glass player controls**: the top buttons sit on glass circles and capsules and the bottom controls on one glass panel over the video, in place of Plex's gray bars; on by default, under Settings → Plex Reborn → Player
 - Add a **Plex Reborn page** to Plex's Settings, there when Settings opens, with pages for Tabs, Plex Online Content, Interface and Player
 
 ### iPhone Duo
@@ -39,6 +40,8 @@ All notable changes to this project will be documented in this file.
 - Make **one tap** show the player controls on the first try
 - Stop **Live TV controls** overlapping on the folded screen
 - Show **channel logos and show art** from Live TV & DVR sources that serve artwork on the local network, such as ErsatzTV; Plex Media Server refuses to resize those images, so they were blank
+- Remove the **empty band under the player's bottom controls**, which came from Plex counting the bottom safe area twice
+- Keep the player's **top buttons clear of the status bar** on the unfolded screen in portrait
 - Stop **streams restarting** when one of Plex's 30-second keep-alive checks fails, which over Plex's relay happened every few minutes and showed as a pause, a reload and a reset zoom; a failed check is now retried on a fresh connection, and the stream restarts only if the server has really ended it
 - Keep **your own tabs** when Plex's Home has a single tab, which happens when Plex's online media sources are turned off for the account
 

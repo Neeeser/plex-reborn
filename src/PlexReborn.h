@@ -9,6 +9,7 @@ extern NSString *const PLXSettingMiniPlayerStyle;   // PLXMiniPlayerStyle, defau
 extern NSString *const PLXSettingBarButtonsInVerticalBar; // BOOL, default YES
 extern NSString *const PLXSettingClearTitleBar;     // BOOL, default YES
 extern NSString *const PLXSettingDeskReflection;    // BOOL, default YES
+extern NSString *const PLXSettingGlassPlayerControls; // BOOL, default YES
 extern NSString *const PLXSettingLibraryTabs;       // PLXLibraryTabsPlacement, default button
 // Plex's online content, hidden per kind. Each defaults to version 0.1.0's single switch.
 extern NSString *const PLXSettingHideMoviesAndShows; // BOOL
@@ -33,6 +34,10 @@ typedef NS_ENUM(NSInteger, PLXMiniPlayerStyle) {
 };
 
 BOOL PLXSettingBool(NSString *key);
+
+// Restyles the full-screen player's controls inside Plex's player view
+// (PMVideoPlayerViewController's view); called after each layout of the video.
+void PLXUpdatePlayerControls(UIView *player);
 NSInteger PLXSettingInteger(NSString *key);
 
 // The vertical bar button for the library tabs of the screen that owns this

@@ -18,6 +18,7 @@ NSString *const PLXSettingMiniPlayerStyle = @"PlexReborn.miniPlayerStyle";
 NSString *const PLXSettingBarButtonsInVerticalBar = @"PlexReborn.barButtonsInVerticalBar";
 NSString *const PLXSettingClearTitleBar = @"PlexReborn.clearTitleBar";
 NSString *const PLXSettingDeskReflection = @"PlexReborn.deskReflection";
+NSString *const PLXSettingGlassPlayerControls = @"PlexReborn.glassPlayerControls";
 NSString *const PLXSettingLibraryTabs = @"PlexReborn.libraryTabs";
 NSString *const PLXSettingHideMoviesAndShows = @"PlexReborn.hideMoviesAndShows";
 NSString *const PLXSettingHideRentals = @"PlexReborn.hideRentals";
@@ -39,7 +40,7 @@ BOOL PLXSettingBool(NSString *key) {
     static NSDictionary<NSString *, NSNumber *> *defaults;
     static dispatch_once_t once;
     dispatch_once(&once, ^{
-        defaults = @{ PLXSettingCustomTabBar: @NO, PLXSettingRowsUnderBar: @YES, PLXSettingBarButtonsInVerticalBar: @YES, PLXSettingClearTitleBar: @YES, PLXSettingDeskReflection: @YES };
+        defaults = @{ PLXSettingCustomTabBar: @NO, PLXSettingRowsUnderBar: @YES, PLXSettingBarButtonsInVerticalBar: @YES, PLXSettingClearTitleBar: @YES, PLXSettingDeskReflection: @YES, PLXSettingGlassPlayerControls: @YES };
     });
     id value = [NSUserDefaults.standardUserDefaults objectForKey:key];
     if (!value && [PLXHideOnlineKeys() containsObject:key]) value = [NSUserDefaults.standardUserDefaults objectForKey:PLXLegacyHideOnlineContent];
@@ -442,6 +443,9 @@ static UIViewController *PLXInterfacePage(void) {
 static UIViewController *PLXPlayerPage(void) {
     return [[PLXFormViewController alloc] initWithTitle:@"Player" build:^NSArray<PLXSection *> *{
         return @[
+            [PLXSection header:@"Controls" rows:@[
+                [PLXRow toggle:@"Glass controls" key:PLXSettingGlassPlayerControls],
+            ] footer:@"Shows the player's buttons on glass over the video instead of Plex's gray bars."],
             [PLXSection header:@"Desk Posture" rows:@[
                 [PLXRow toggle:@"Reflect the video below the fold" key:PLXSettingDeskReflection],
             ] footer:@"With an iPhone Duo half open like a laptop, video plays on the top half and the controls sit on the bottom half over a reflection of the video."],
