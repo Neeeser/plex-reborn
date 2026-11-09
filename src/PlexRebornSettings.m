@@ -6,6 +6,7 @@
 // "Plex Reborn" entry is the table's header view instead, styled like Plex's rows.
 #import "PlexReborn.h"
 #import <objc/runtime.h>
+#import <objc/message.h>
 
 #ifndef PLX_VERSION
 #define PLX_VERSION "dev"
@@ -475,58 +476,91 @@ static UIViewController *PLXRootPage(void) {
 
 #pragma mark - Entry in Plex's Settings
 
+// A row at the top of Plex's Settings list, drawn like Plex's own rows. Its
+// colors, title font and chevron are copied from the first of Plex's rows on
+// screen, so it matches whatever Plex draws; the constants below are what
+// Plex 8.45 uses, for the first layout before Plex's rows exist.
 @interface PLXSettingsEntryView : UIControl
 @property (nonatomic, weak) UIViewController *owner;
+@property (nonatomic, strong) UILabel *title, *chevron;
+@property (nonatomic, strong) UIView *separator;
+@property (nonatomic) BOOL matchedPlex;
 @end
+
+static const CGFloat PLXSettingsRowHeight = 45.67;
+static const CGFloat PLXSettingsRowInset = 15;
 
 @implementation PLXSettingsEntryView
 
 - (instancetype)initWithOwner:(UIViewController *)owner {
-    if ((self = [super initWithFrame:CGRectMake(0, 0, 320, 76)])) {
+    if ((self = [super initWithFrame:CGRectMake(0, 0, 320, PLXSettingsRowHeight)])) {
         _owner = owner;
-        UIView *row = [UIView new];
-        row.userInteractionEnabled = NO;
-        row.backgroundColor = [UIColor colorWithRed:0.13 green:0.14 blue:0.16 alpha:1];
-        row.layer.cornerRadius = 12;
-        row.layer.cornerCurve = kCACornerCurveContinuous;
-        row.translatesAutoresizingMaskIntoConstraints = NO;
-        [self addSubview:row];
-
-        UILabel *title = [UILabel new];
-        title.text = @"Plex Reborn";
-        title.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
-        title.textColor = UIColor.whiteColor;
-        UILabel *subtitle = [UILabel new];
-        subtitle.text = @"Tabs, content and layout";
-        subtitle.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
-        subtitle.textColor = [UIColor colorWithWhite:1 alpha:0.6];
-        UIStackView *labels = [[UIStackView alloc] initWithArrangedSubviews:@[title, subtitle]];
-        labels.axis = UILayoutConstraintAxisVertical;
-        labels.spacing = 2;
-        labels.translatesAutoresizingMaskIntoConstraints = NO;
-        [row addSubview:labels];
-
-        UIImageView *chevron = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"chevron.right"]];
-        chevron.tintColor = [UIColor colorWithWhite:1 alpha:0.6];
-        chevron.translatesAutoresizingMaskIntoConstraints = NO;
-        [row addSubview:chevron];
-
-        [NSLayoutConstraint activateConstraints:@[
-            [row.leadingAnchor constraintEqualToAnchor:self.layoutMarginsGuide.leadingAnchor],
-            [row.trailingAnchor constraintEqualToAnchor:self.layoutMarginsGuide.trailingAnchor],
-            [row.topAnchor constraintEqualToAnchor:self.topAnchor constant:12],
-            [row.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-8],
-            [labels.leadingAnchor constraintEqualToAnchor:row.leadingAnchor constant:16],
-            [labels.centerYAnchor constraintEqualToAnchor:row.centerYAnchor],
-            [chevron.trailingAnchor constraintEqualToAnchor:row.trailingAnchor constant:-16],
-            [chevron.centerYAnchor constraintEqualToAnchor:row.centerYAnchor],
-        ]];
+        self.backgroundColor = [UIColor colorWithRed:0.122 green:0.137 blue:0.149 alpha:1];
+        _title = [UILabel new];
+        _title.text = @"Plex Reborn";
+        _title.font = [UIFont systemFontOfSize:13];
+        _title.textColor = UIColor.whiteColor;
+        _chevron = [UILabel new];
+        _chevron.text = @"\u203A";
+        _chevron.textColor = [UIColor colorWithWhite:1 alpha:0.6];
+        _chevron.textAlignment = NSTextAlignmentRight;
+        _separator = [UIView new];
+        _separator.backgroundColor = [UIColor colorWithRed:0.204 green:0.227 blue:0.247 alpha:1];
+        for (UIView *view in @[_title, _chevron, _separator]) {
+            view.userInteractionEnabled = NO;
+            [self addSubview:view];
+        }
         [self addTarget:self action:@selector(open) forControlEvents:UIControlEventTouchUpInside];
-        self.accessibilityLabel = @"Plex Reborn settings";
+        [self addTarget:self action:@selector(highlight) forControlEvents:UIControlEventTouchDown | UIControlEventTouchDragEnter];
+        [self addTarget:self action:@selector(unhighlight) forControlEvents:UIControlEventTouchUpInside | UIControlEventTouchUpOutside | UIControlEventTouchCancel | UIControlEventTouchDragExit];
+        self.accessibilityLabel = @"Plex Reborn";
         self.accessibilityTraits = UIAccessibilityTraitButton;
     }
     return self;
 }
+
+static UIView *PLXFindViewOfClass(UIView *view, Class cls) {
+    if ([view isKindOfClass:cls]) return view;
+    for (UIView *sub in view.subviews) { UIView *found = PLXFindViewOfClass(sub, cls); if (found) return found; }
+    return nil;
+}
+
+// Copies the background, title font and chevron from one of Plex's rows.
+- (void)matchPlexRows {
+    UITableView *table = (UITableView *)self.superview;
+    if (self.matchedPlex || ![table isKindOfClass:UITableView.class]) return;
+    Class cellClass = NSClassFromString(@"PMSettingsCell");
+    UITableViewCell *cell = nil;
+    for (UITableViewCell *visible in table.visibleCells) if (cellClass && [visible isKindOfClass:cellClass]) { cell = visible; break; }
+    if (!cell) return;
+    UILabel *title = (UILabel *)PLXFindViewOfClass(cell.contentView, NSClassFromString(@"PMMultilineLabel"));
+    UILabel *chevron = (UILabel *)PLXFindViewOfClass(cell.contentView, NSClassFromString(@"PMSymbolsLabel"));
+    if (cell.backgroundColor) self.backgroundColor = cell.backgroundColor;
+    if ([title isKindOfClass:UILabel.class]) { self.title.font = title.font; self.title.textColor = title.textColor; }
+    if ([chevron isKindOfClass:UILabel.class] && chevron.attributedText.length) {
+        self.chevron.attributedText = chevron.attributedText;
+        self.chevron.font = chevron.font;
+        self.chevron.textColor = chevron.textColor;
+        self.chevron.textAlignment = chevron.textAlignment;
+    }
+    self.matchedPlex = YES;
+}
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    [self matchPlexRows];
+    // Plex's rows stop at the safe area beside the iPhone Duo's vertical bar.
+    CGFloat contentWidth = CGRectGetWidth(self.bounds) - self.safeAreaInsets.left - self.safeAreaInsets.right;
+    CGFloat left = self.safeAreaInsets.left, height = CGRectGetHeight(self.bounds);
+    // Plex's chevron sits in a 42 x 32 box, 10 points from the row's end.
+    self.chevron.frame = CGRectMake(left + contentWidth - 10 - 42, (height - 32) / 2, 42, 32);
+    self.title.frame = CGRectMake(left + PLXSettingsRowInset, 0, CGRectGetMinX(self.chevron.frame) - left - 2 * PLXSettingsRowInset, height);
+    CGFloat line = 1 / (self.window.screen.scale ?: 3);
+    self.separator.frame = CGRectMake(left, height - line, contentWidth, line);
+}
+
+- (void)highlight { self.alpha = 0.6; }
+- (void)unhighlight { self.alpha = 1; }
 
 - (void)open {
     UIViewController *owner = self.owner;
@@ -547,13 +581,20 @@ static IMP PLXOrigSettingsViewWillAppear;
 
 // Added before the screen appears; adding it once the screen had appeared
 // pushed Plex's first section down while it was already on screen.
+// Plex's other settings pages (Account, Experience and so on) are the same
+// controller class showing another view model, so the row goes only on the
+// page whose view model is the Settings root.
 static void PLXSettingsViewWillAppear(UIViewController *self, SEL _cmd, BOOL animated) {
     ((void (*)(id, SEL, BOOL))PLXOrigSettingsViewWillAppear)(self, _cmd, animated);
+    SEL viewModel = NSSelectorFromString(@"viewModel");
+    id model = [self respondsToSelector:viewModel] ? ((id (*)(id, SEL))objc_msgSend)(self, viewModel) : nil;
+    Class root = NSClassFromString(@"PMSettingsRootViewModel");
+    if (!root || ![model isKindOfClass:root]) return;
     UITableView *table = PLXFindTable(self.view);
     if (!table || [table.tableHeaderView isKindOfClass:PLXSettingsEntryView.class]) return;
     PLXSettingsEntryView *entry = [[PLXSettingsEntryView alloc] initWithOwner:self];
     CGFloat width = CGRectGetWidth(table.bounds) ?: CGRectGetWidth(self.view.bounds);
-    entry.frame = CGRectMake(0, 0, width, 76);
+    entry.frame = CGRectMake(0, 0, width, PLXSettingsRowHeight);
     table.tableHeaderView = entry;
 }
 
