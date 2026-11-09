@@ -1,7 +1,7 @@
 # Plex-Reborn
 ![GitHub Release](https://img.shields.io/github/v/release/Neeeser/plex-reborn)
 
-iOS tweak for the [Plex](https://www.plex.tv/) app that keeps the classic Plex 8.45 interface alive on current iPhones. It brings Liquid Glass bars, a cleaner Home without Plex's online content, your own choice of tabs, and full support for iPhone Duo.
+iOS tweak for the [Plex](https://www.plex.tv/) app that keeps the classic Plex 8.45 interface alive on current iPhones. It brings Liquid Glass bars, fixes for streaming bugs, a cleaner Home without Plex's online content, your own choice of tabs, and full support for iPhone Duo.
 
 > [!NOTE]
 > Plex-Reborn is unofficial and not affiliated with Plex Inc. Releases include a patched copy of Plex 8.45, an app Plex distributed for free. If Plex asks for it to be taken down, releases will switch to the add-on and patch script only.
@@ -16,6 +16,12 @@ Download `PlexReborn-<version>.ipa` from the [latest release](https://github.com
 
 - Plex 8.45's classic interface with iOS 26 Liquid Glass bars, buttons and tab bar
 - Scroll bars are hidden throughout the app
+
+### Playback Fixes
+
+- Streams over Plex's relay no longer pause and reload every few minutes when a keep-alive check drops
+- Seeking in a converted (transcoded) stream lands where you aim instead of up to two minutes off
+- A converted stream that cuts off early resumes where it stopped instead of ending the episode
 
 ### New Features
 
