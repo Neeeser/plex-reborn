@@ -140,7 +140,7 @@ static void PLXDumpClasses(void) {
         [out appendFormat:@"CLASS %@ : %@\n", name, NSStringFromClass(class_getSuperclass(classes[i]))];
         unsigned int methodCount = 0;
         Method *methods = class_copyMethodList(classes[i], &methodCount);
-        for (unsigned int m = 0; m < methodCount; m++) [out appendFormat:@"  - %@\n", NSStringFromSelector(method_getName(methods[m]))];
+        for (unsigned int m = 0; m < methodCount; m++) [out appendFormat:@"  - %@ %s\n", NSStringFromSelector(method_getName(methods[m])), method_getTypeEncoding(methods[m])];
         free(methods);
         unsigned int propertyCount = 0;
         objc_property_t *properties = class_copyPropertyList(classes[i], &propertyCount);

@@ -48,6 +48,8 @@ All notable changes to this project will be documented in this file.
 - Stop the **library tabs button repeating** in the title bar's menu on iPhones without the Duo's vertical bar
 - Remove a **gray line across the player** at the progress bar, shown before the video starts, with glass controls on
 - Keep the player's **close button clear of the clock** in folded landscape on iPhone Duo
+- Make **seeking land where you aim** in a transcoded stream, as when watching over Plex's relay away from home; skipping back used to resume 15 seconds to 2 minutes past the target. Each seek now restarts the stream at the target
+- Stop a transcoded stream that **ends early** from finishing the episode and rewinding to the start; it now restarts where it stopped
 - Stop **streams restarting** when one of Plex's 30-second keep-alive checks fails, which over Plex's relay happened every few minutes and showed as a pause, a reload and a reset zoom; a failed check is now retried on a fresh connection, and the stream restarts only if the server has really ended it
 - Keep **your own tabs** when Plex's Home has a single tab, which happens when Plex's online media sources are turned off for the account
 

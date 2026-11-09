@@ -44,7 +44,31 @@ static NSURLRequest *PLXTestFailFirstPing(NSURLRequest *request) {
 }
 #endif
 
+#if TARGET_OS_SIMULATOR
+// Simulator test hook: with PLX_TEST_FORCE_RELAY=1 in the launch environment,
+// requests to the server's direct addresses (LAN and WAN) go to a closed port,
+// so Plex falls back to its relay (port 8443) the way a phone away from home
+// does, and the stream is transcoded as it is there.
+static NSURLRequest *PLXTestForceRelay(NSURLRequest *request) {
+    if (!getenv("PLX_TEST_FORCE_RELAY")) return request;
+    NSURLComponents *components = [NSURLComponents componentsWithURL:request.URL resolvingAgainstBaseURL:NO];
+    NSString *host = components.host.lowercaseString;
+    BOOL direct = [host hasSuffix:@".plex.direct"] && components.port.integerValue != 8443;
+    // The app's own embedded server listens on the loopback address.
+    BOOL rawAddress = [host rangeOfString:@"^[0-9.]+$" options:NSRegularExpressionSearch].location != NSNotFound && ![host hasPrefix:@"127."];
+    if (!direct && !rawAddress) return request;
+    NSMutableURLRequest *broken = [request mutableCopy];
+    components.host = @"127.0.0.1";
+    components.port = @1;
+    broken.URL = components.URL;
+    return broken;
+}
+#endif
+
 static NSURLRequest *PLXObserveRequest(NSURLRequest *request) {
+#if TARGET_OS_SIMULATOR
+    request = PLXTestForceRelay(request);
+#endif
     if (!PLXIsPingRequest(request)) return request;
     @synchronized (PLXPingPath) { PLXLastPing = [request copy]; }
 #if TARGET_OS_SIMULATOR

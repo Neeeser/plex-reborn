@@ -83,6 +83,8 @@ Copy `config.example.sh` to `config.local.sh` and fill it in, and put the decryp
 | `scripts/make-simulator-app.sh` | Converts the device app for the simulator, then runs `build-sim.sh` |
 | `scripts/build-sim.sh` | Rebuilds the add-on for the simulator, installs and launches it |
 | `scripts/view-dump.sh` | Saves the running simulator app's screens, windows and views to `logs/` |
+| `scripts/engine.sh` | Sends a playback command (seek, skip, pause, resume, a fake early end, status) to the simulator app's current video |
+| `scripts/seek-test.sh` | Seeks the simulator app's video by each given offset and prints where playback actually resumed |
 | `scripts/package-release.sh` | Builds the release IPA and add-on into `dist/`; `--publish "<summary>"` creates a draft GitHub release |
 | `scripts/deploy.sh` | Signs any unpacked app with the Xcode profile and installs it |
 
@@ -103,6 +105,7 @@ The add-on's source is in `src/`:
 | Online content | `src/PlexHideOnlineContent.m` | Hides Plex's online sources from the side menu and Home |
 | Local artwork | `src/PlexLocalImages.m` | Loads artwork from local-network addresses (such as an IPTV tool's channel logos) directly, which Plex Media Server will not resize |
 | Stream keep-alive | `src/PlexStreamKeepAlive.m` | Retries a failed transcode keep-alive check on a fresh connection before Plex restarts the stream |
+| Transcoded seeking | `src/PlexTranscodeSeek.m` | Seeks in a transcoded stream by restarting it at the target, and restarts a stream that ends early instead of finishing the episode |
 | Keychain | `src/PlexKeychainPrefix.m` | Uses the signing team's keychain group, so release IPAs keep their sign-in |
 | Settings | `src/PlexRebornSettings.m` | The Plex Reborn page in Plex's Settings |
 | Sheets | `src/PlexDuoSheets.m` | Plex's own sheets reach the screen edge beside the vertical bar |
