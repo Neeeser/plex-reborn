@@ -10,12 +10,6 @@ iOS tweak for the [Plex](https://www.plex.tv/) app that keeps the classic Plex 8
 
 Download `PlexReborn-<version>.ipa` from the [latest release](https://github.com/Neeeser/plex-reborn/releases/latest) and install it with [Sideloadly](#sideloadly), AltStore or SideStore.
 
-### Which build should I install?
-
-There is one build. Plex's app extensions (widgets, share sheet, notification content) are removed, so a sideload registers only **1 App ID**, which fits a free Apple ID. With a free Apple ID the app must be reinstalled every 7 days; a paid Apple Developer account lasts a year.
-
-Pick your own bundle ID (for example `com.yourname.plexreborn`) so Plex-Reborn installs beside the App Store version of Plex, and reuse it for every update so your sign-in and settings carry over.
-
 ## Features
 
 ### General
@@ -31,7 +25,7 @@ Pick your own bundle ID (for example `com.yourname.plexreborn`) so Plex-Reborn i
 - **Remembered library view**: Each library opens on the tab you last picked, such as Library instead of Recommended
 - **Glass player controls**: The player's buttons sit on glass over the video instead of Plex's gray bars, with the bottom controls in one panel sized to the controls. Every control stays where it was (Settings > Plex Reborn > Player > Glass controls)
 
-### iPhone Duo
+### iPhone Duo Specific Features
 
 - Video fills the screen on the folded and unfolded screens, with the status bar and home indicator hidden during playback and the controls clear of the camera
 - Half open like a laptop, video plays on the top half with the controls on the bottom half, which shows the video reflected behind them (Settings > Plex Reborn > Player)
@@ -44,7 +38,7 @@ Pick your own bundle ID (for example `com.yourname.plexreborn`) so Plex-Reborn i
 
 ## Known Issues
 
-- Release IPAs adopt the signing Apple ID's keychain group at launch so Plex keeps your sign-in; this has not been tested with a second Apple ID yet. If Plex says "Login Credentials Expired" after every launch, open an issue
+- Staying signed in has only been tested with one Apple ID so far. If Plex asks you to sign in again after every launch, open an issue
 - Without a vertical bar (most iPhones, and the Duo unfolded in portrait), the mini player is Plex's full-width bar, not the floating card
 - Hiding Plex's online content covers the side menu, the More page, Home and the Live TV guide; search results can still include Plex's online titles
 - With your own tabs, the tab bar's selection does not always follow screens opened from the side menu

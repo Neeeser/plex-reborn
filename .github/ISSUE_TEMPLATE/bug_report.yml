@@ -1,0 +1,46 @@
+name: Bug report
+description: Something in Plex Reborn is broken or looks wrong
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead. A screenshot or screen recording helps a lot.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Tap ...
+        3. See ...
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: iPhone and iOS version
+      placeholder: iPhone Duo, iOS 27.2 (unfolded, landscape)
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Plex Reborn version
+      description: Shown at the bottom of Settings > Plex Reborn.
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you installed it
+      options:
+        - Release IPA with Sideloadly
+        - Release IPA with AltStore or SideStore
+        - Patched my own IPA
+        - Other
+    validations:
+      required: true
