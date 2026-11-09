@@ -1,7 +1,7 @@
 # Plex-Reborn
 ![GitHub Release](https://img.shields.io/github/v/release/Neeeser/plex-reborn)
 
-iOS tweak for the [Plex](https://www.plex.tv/) app that keeps the classic Plex 8.45 interface alive on current iPhones. It brings Liquid Glass bars, fixes for streaming bugs, a cleaner Home without Plex's online content, your own choice of tabs, and full support for iPhone Duo.
+iOS tweak that keeps the classic [Plex](https://www.plex.tv/) 8.45 app alive on current iPhones, with Liquid Glass, streaming fixes, a cleaner Home, your own tabs and full iPhone Duo support.
 
 > [!NOTE]
 > Plex-Reborn is unofficial and not affiliated with Plex Inc. Releases include a patched copy of Plex 8.45, an app Plex distributed for free. If Plex asks for it to be taken down, releases will switch to the add-on and patch script only.
@@ -12,44 +12,42 @@ Download `PlexReborn-<version>.ipa` from the [latest release](https://github.com
 
 ## Features
 
-### General
+Settings are under Settings > Plex Reborn.
 
-- Plex 8.45's classic interface with iOS 26 Liquid Glass bars, buttons and tab bar
-- Scroll bars are hidden throughout the app
+- Plex 8.45's classic interface with iOS 26 Liquid Glass
+- Hidden scroll bars
 
 ### Playback Fixes
 
-- Streams over Plex's relay no longer pause and reload every few minutes when a keep-alive check drops
-- Seeking in a converted (transcoded) stream lands where you aim instead of up to two minutes off
-- A converted stream that cuts off early resumes where it stopped instead of ending the episode
+- No more pauses and reloads over Plex's relay
+- Seeking in transcoded streams lands where you aim
+- A stream that cuts off early resumes instead of ending the episode
 
 ### New Features
 
-- **Hide Plex's online content**: Hide Movies & Shows, Rentals, Discover and Plex's free Live TV channels, each on its own switch or all at once, so you only see your own libraries, the ones shared with you, your Watchlist and your server's Live TV. Hidden content leaves the side menu, the More page, Home and the Live TV guide (Settings > Plex Reborn > Plex Online Content)
-- **Your own tabs**: Pick up to 5 tabs from Home's tabs and the side menu, such as Home, TV Shows, Movies and Live TV. They show in the tab bar at the bottom, or in the vertical bar on iPhone Duo (Settings > Plex Reborn > Tabs)
-- **Library tabs menu**: A library's Recommended, Library and Categories become one button with a menu instead of a second tab bar (Settings > Plex Reborn > Tabs > Library tabs)
-- **Remembered library view**: Each library opens on the tab you last picked, such as Library instead of Recommended
-- **Floating mini player**: The mini player is a glass capsule floating above the tab bar instead of Plex's flat bar, and pages scroll clear of both (Settings > Plex Reborn > Interface > Mini Player)
-- **Glass player controls**: The player's buttons sit on glass over the video instead of Plex's gray bars, with the bottom controls in one panel sized to the controls. Every control stays where it was (Settings > Plex Reborn > Player > Glass controls)
+- **Hide Plex's online content**: Movies & Shows, Rentals, Discover and Plex's Live TV channels, each on its own switch
+- **Your own tabs**: up to 5, in the tab bar or the Duo's vertical bar
+- **Library menu**: Recommended, Library and Categories in one button; each library reopens on the tab you last used
+- **Floating mini player**: a glass capsule above the tab bar
+- **Glass player controls**: glass in place of Plex's gray bars
 
 ### iPhone Duo Specific Features
 
-- Video fills the screen on the folded and unfolded screens, with the status bar and home indicator hidden during playback and the controls clear of the camera
-- Half open like a laptop, video plays on the top half with the controls on the bottom half, which shows the video reflected behind them (Settings > Plex Reborn > Player)
-- Plex's tabs, top bar buttons and library tabs move into the Duo's vertical bar
-- The title bar is clear, hides while scrolling, and the first screen of each tab starts at the top of the screen without a title
-- Poster rows and the Live TV guide run under the vertical bar to the screen edge (Settings > Plex Reborn > Interface)
-- The floating mini player becomes a glass card beside the vertical bar's tabs (Settings > Plex Reborn > Interface > Mini Player)
-- Plex's own sheets, such as the server picker, reach the screen edge
-- The Duo's second panel is no longer mistaken for an external TV
+- Full-screen video folded and unfolded, with the controls clear of the camera
+- Half open, video plays on top with the controls below over its reflection
+- Tabs and top bar buttons in the vertical bar
+- A clear title bar that hides while scrolling
+- Posters, the Live TV guide and Plex's sheets reach the screen edge
+- The mini player becomes a glass card beside the vertical bar
+- The second panel is no longer mistaken for an external TV
 
 ## Known Issues
 
-- Staying signed in has only been tested with one Apple ID so far. If Plex asks you to sign in again after every launch, open an issue
-- Hiding Plex's online content covers the side menu, the More page, Home and the Live TV guide; search results can still include Plex's online titles
-- With your own tabs, the tab bar's selection does not always follow screens opened from the side menu
-- In desk posture, Home's poster rows run across the crease
-- The email sign-in form is shifted left, and the launch logo is oversized
+- Staying signed in is tested with one Apple ID; open an issue if Plex asks you to sign in on every launch
+- Search can still show Plex's online titles when they're hidden
+- With your own tabs, the tab bar doesn't always follow screens opened from the side menu
+- In desk posture, Home's poster rows cross the crease
+- The email sign-in form sits off-center, and the launch logo is oversized
 
 ## Sideloadly
 
@@ -73,7 +71,7 @@ To build the app from your own copy of Plex instead of the release IPA, you need
    `./scripts/patch-ipa.sh Plex-8.45-decrypted.ipa PlexDuoShim-<version>.dylib PlexReborn.ipa --release`
 4. Install `PlexReborn.ipa` as described under [Install](#install).
 
-`patch-ipa.sh` removes the App Store purchase files and app extensions, sets the name, stamps the app for the iOS 27 SDK (which gives it Liquid Glass and the iPhone Duo's layouts), adds the scene setup iOS 27 requires, and adds the add-on. Pass `--bundle-id` and `--team-id` instead of `--release` to build for your own signing setup.
+`patch-ipa.sh` strips the App Store files, stamps the app for the iOS 27 SDK and adds the add-on. For your own signing setup, pass `--bundle-id` and `--team-id` instead of `--release`.
 
 ## Build
 
