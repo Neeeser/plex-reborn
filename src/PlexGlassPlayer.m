@@ -188,22 +188,79 @@ static void PLXUpdateTopButtons(UIView *topBar, BOOL glass) {
     }
 }
 
+// Space between the panel's bottom edge and the screen's bottom edge. The
+// player hides the home indicator while the controls are hidden, and it
+// shows again in the bottom 13 pt when they appear, so the panel stops above it.
+static const CGFloat PLXPanelGapAboveHomeIndicator = 20;
+
+// Plex pins its bottom controls to the bottom of the safe area and adds more
+// space below the last row inside them, which leaves the panel about 45 pt
+// above the screen's bottom edge. In glass mode the controls move down so the
+// panel sits PLXPanelGapAboveHomeIndicator above the edge.
+static const void *PLXControlsBottomPinKey = &PLXControlsBottomPinKey;
+
+static void PLXSetControlsDrop(UIView *wrapper, CGFloat panelBottomInWindow, BOOL glass) {
+    UIView *player = wrapper.superview.superview;
+    NSLayoutConstraint *pin = objc_getAssociatedObject(wrapper, PLXControlsBottomPinKey);
+    if (!pin) {
+        for (NSLayoutConstraint *c in player.constraints) {
+            if (c.firstItem == wrapper && c.firstAttribute == NSLayoutAttributeBottom && [c.secondItem isKindOfClass:UILayoutGuide.class]) pin = c;
+        }
+        if (!pin) return;
+        objc_setAssociatedObject(wrapper, PLXControlsBottomPinKey, pin, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    CGFloat safeBottom = player.safeAreaInsets.bottom;
+    CGFloat wanted = 0;
+    if (glass && wrapper.window) {
+        CGFloat gap = CGRectGetMaxY(wrapper.window.bounds) - panelBottomInWindow;
+        CGFloat target = safeBottom > 0 ? PLXPanelGapAboveHomeIndicator : PLXPanelScreenInset;
+        // The panel's position already includes the current drop, so adjust it by the difference.
+        wanted = MIN(MAX(pin.constant + gap - target, 0), safeBottom + PLXPanelGapAboveHomeIndicator);
+    }
+    if (fabs(pin.constant - wanted) > 1) pin.constant = wanted;
+}
+
+// Plex's progress bar has square ends. In glass mode each part of the track
+// (played, buffered, remaining) gets round ends to match the panel. The
+// thumb is taller than the track and keeps its shape.
+static void PLXRoundProgressBar(UIView *slider, BOOL glass) {
+    NSMutableArray<UIView *> *parts = [NSMutableArray array];
+    for (UIView *view in slider.subviews) {
+        if ([view isKindOfClass:UIImageView.class]) [parts addObject:view];
+        else [parts addObjectsFromArray:view.subviews];
+    }
+    for (UIView *part in parts) {
+        CGFloat height = CGRectGetHeight(part.bounds);
+        if (height <= 0 || height > 8 || CGRectGetWidth(part.bounds) < height) continue;
+        CGFloat radius = glass ? height / 2 : 0;
+        if (part.layer.cornerRadius != radius) part.layer.cornerRadius = radius;
+        if (glass && !part.clipsToBounds) part.clipsToBounds = YES;
+    }
+}
+
 // The glass panel behind the bottom controls: from just above the progress
 // bar to just below the last row that shows, across the controls' column.
 static void PLXUpdateBottomPanel(UIView *controls) {
     UIView *wrapper = controls.superview;
     UIView *container = wrapper.superview;
     if (!container) return;
-    if (!PLXSettingBool(PLXSettingGlassPlayerControls)) { PLXHideGlass(container); return; }
-    CGRect content = PLXVisibleContentFrame(controls, controls);
-    if (CGRectIsNull(content)) { PLXHideGlass(container); return; }
     UIView *slider = PLXFindView(container, ^BOOL(UIView *view) {
         return [view.accessibilityIdentifier isEqualToString:@"videoPlayer.progressView"];
     });
+    BOOL glass = PLXSettingBool(PLXSettingGlassPlayerControls);
+    if (slider) PLXRoundProgressBar(slider, glass);
+    CGRect content = PLXVisibleContentFrame(controls, controls);
+    if (!glass || CGRectIsNull(content)) {
+        PLXHideGlass(container);
+        PLXSetControlsDrop(wrapper, 0, NO);
+        return;
+    }
     BOOL sliderShown = slider && !slider.hidden;
     UIEdgeInsets outset = UIEdgeInsetsMake(sliderShown ? PLXPanelPaddingTop : PLXPanelPaddingTop - CGRectGetMinY(content), PLXPanelPaddingX,
                                            CGRectGetMaxY(content) + PLXPanelPaddingBottom - CGRectGetHeight(controls.bounds), PLXPanelPaddingX);
     PLXPinGlass(PLXGlassFor(container), container, wrapper, sliderShown ? slider : controls, controls, outset, 26);
+    CGFloat panelBottom = [controls convertPoint:CGPointMake(0, CGRectGetMaxY(content) + PLXPanelPaddingBottom) toView:nil].y;
+    PLXSetControlsDrop(wrapper, panelBottom, YES);
 }
 
 void PLXUpdatePlayerControls(UIView *player) {

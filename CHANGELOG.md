@@ -17,7 +17,7 @@ All notable changes to this project will be documented in this file.
 - Show a library's **Recommended, Library and Categories** as one menu button instead of a second tab bar, and open each library on the tab you last picked
 - Ship a **ready-to-sign IPA** with each release, which adopts the signing Apple ID's keychain group so Plex can keep your sign-in
 - Hide **scroll bars** throughout the app
-- Add **glass player controls**: the top buttons sit on glass circles and capsules and the bottom controls on one glass panel over the video, in place of Plex's gray bars; on by default, under Settings → Plex Reborn → Player
+- Add **glass player controls**: the top buttons sit on glass circles and capsules and the bottom controls on one glass panel just above the home indicator, with a progress bar with round ends, in place of Plex's gray bars; on by default, under Settings → Plex Reborn → Player
 - Add a **Plex Reborn page** to Plex's Settings, there when Settings opens, with pages for Tabs, Plex Online Content, Interface and Player
 
 ### iPhone Duo
