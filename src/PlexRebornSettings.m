@@ -317,11 +317,18 @@ typedef NS_ENUM(NSInteger, PLXTabsSection) {
 
 - (UITableViewCell *)tabCellForEntry:(PLXTabEntry *)entry {
     UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:nil];
+    // A saved tab that Plex does not offer right now (say, Live TV on an
+    // account without it) is skipped in the tab bar; say so here.
+    BOOL available = [self.available containsObject:entry];
     cell.textLabel.text = entry.title;
-    cell.detailTextLabel.text = [entry.identifier hasPrefix:@"home:"] ? @"Home screen tab" : (entry.subtitle.length ? entry.subtitle : @"Side menu");
+    cell.textLabel.textColor = available ? UIColor.labelColor : UIColor.secondaryLabelColor;
+    cell.detailTextLabel.text = !available ? @"Not available right now"
+        : [entry.identifier hasPrefix:@"home:"] ? @"Home screen tab" : (entry.subtitle.length ? entry.subtitle : @"Side menu");
     cell.detailTextLabel.textColor = UIColor.secondaryLabelColor;
-    cell.imageView.image = [entry.image imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-    cell.imageView.tintColor = UIColor.labelColor;
+    // Every row gets an icon so the titles line up.
+    UIImage *image = entry.image ?: [UIImage systemImageNamed:available ? @"square.dashed" : @"exclamationmark.circle"];
+    cell.imageView.image = [image imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    cell.imageView.tintColor = available ? UIColor.labelColor : UIColor.secondaryLabelColor;
     return cell;
 }
 
@@ -432,7 +439,7 @@ static UIViewController *PLXInterfacePage(void) {
             ] footer:@"The clear title bar also leaves the title off the first screen of each tab, so content starts at the top. Both apply while the iPhone Duo's vertical bar shows."],
             [PLXSection header:@"Mini Player" rows:@[
                 [PLXRow choice:@"Style" key:PLXSettingMiniPlayerStyle options:@[@"Floating card", @"Full-width bar", @"Plex's bar"]],
-            ] footer:@"The floating card and full-width bar apply beside the iPhone Duo's vertical bar."],
+            ] footer:@"The floating card is a glass capsule above the tab bar, or a card beside the iPhone Duo's vertical bar. The full-width bar applies beside the vertical bar; elsewhere it shows Plex's bar."],
             [PLXSection header:@"Posters" rows:@[
                 [PLXRow toggle:@"Posters scroll under the vertical bar" key:PLXSettingRowsUnderBar],
             ] footer:@"Poster rows and the Live TV guide run to the screen edge under the iPhone Duo's vertical bar."],

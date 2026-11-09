@@ -15,7 +15,10 @@
 //   and leaves the row in the bar's top-left corner.
 // - Plex's bar: unchanged.
 //
-// Without a vertical bar (unfolded portrait) Plex's own bar is used.
+// Without a vertical bar (standard iPhones, and the Duo unfolded in
+// portrait), the floating card is a glass capsule just above the tab bar at
+// the bottom (or the home indicator when no tab bar shows), the way iOS 26
+// apps place their mini players. Full-width bar falls back to Plex's bar there.
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 #import "PlexReborn.h"
@@ -286,12 +289,89 @@ static void PLXLayoutFloating(UIView *miniPlayer, PLXMiniPlayerState *state, NSI
     PLXSetConstant(state.bottom, PLXCardInset);
     PLXSetConstant(state.leading, PLXCardInset);
     PLXSetConstant(state.trailing, 0);
+    // The Duo unfolded in portrait has no vertical bar and uses the capsule's rounder corners.
+    if (@available(iOS 26.0, *)) {
+        state.glass.cornerConfiguration = [UICornerConfiguration configurationWithUniformRadius:[UICornerRadius fixedRadius:PLXCardCornerRadius]];
+    } else {
+        state.glass.layer.cornerRadius = PLXCardCornerRadius;
+    }
+    miniPlayer.layer.cornerRadius = PLXCardCornerRadius;
 
     // Padding at the bottom of the screens so their content scrolls clear of the card.
     BOOL shown = !container.hidden && !miniPlayer.hidden && CGRectGetMinY(container.frame) < CGRectGetHeight(root.bounds) - 1;
     CGFloat cardHeight = state.cardHeight ? PLXCardHeight : CGRectGetHeight(miniPlayer.bounds);
     CGFloat cardTopFromBottom = cardHeight + bottom;
     PLXSetAddedBottomInset(state, shown ? MAX(0, cardTopFromBottom + PLXCardGap - safe.bottom) : 0);
+}
+
+static void PLXFindMiniPlayers(UIView *view, NSMutableArray<UIView *> *found);
+
+#pragma mark - Without a vertical bar
+
+static BOOL PLXShowsOnScreen(UIView *view) {
+    if (!view.window) return NO;
+    for (UIView *v = view; v; v = v.superview) {
+        if (v.hidden || v.alpha < 0.01) return NO;
+    }
+    return YES;
+}
+
+// Top of the tab bar showing along the bottom of `root` (Plex Reborn's own
+// tabs, or one of Plex's bars), in root's coordinates; CGFLOAT_MAX when none.
+static CGFloat PLXBottomBarTop(UIView *root, UIView *view) {
+    if (view.hidden || view.alpha < 0.01) return CGFLOAT_MAX;
+    if ([view isKindOfClass:UITabBar.class]) {
+        if (!PLXShowsOnScreen(view)) return CGFLOAT_MAX;
+        CGRect frame = [view convertRect:view.bounds toView:root];
+        return CGRectGetMaxY(frame) >= CGRectGetHeight(root.bounds) - 2 ? CGRectGetMinY(frame) : CGFLOAT_MAX;
+    }
+    CGFloat top = CGFLOAT_MAX;
+    for (UIView *sub in view.subviews) top = MIN(top, PLXBottomBarTop(root, sub));
+    return top;
+}
+
+static const CGFloat PLXCapsuleSideMargin = 20.0;  // matches the system tab bar's inset
+static const CGFloat PLXCapsuleLeadingInset = 14.0; // clears the capsule's rounded end
+
+static void PLXLayoutCapsule(UIView *miniPlayer, PLXMiniPlayerState *state) {
+    UIView *container = miniPlayer.superview, *root = container.superview;
+    UIEdgeInsets safe = root.safeAreaInsets;
+    CGFloat height = CGRectGetHeight(root.bounds);
+    // Plex Reborn's own tab bar sits in the window's root screen, outside the mini player's parent.
+    CGFloat barTop = root.window ? PLXBottomBarTop(root, root.window) : CGFLOAT_MAX;
+    BOOL bar = barTop < height;
+    CGFloat bottom = bar ? height - barTop + PLXCardGap : MAX(PLXMiniPlayerEdgeMargin, safe.bottom - 16);
+    PLXSetPinInset(state.containerPins[0], miniPlayer, safe.left + PLXCapsuleSideMargin, YES);
+    PLXSetPinInset(state.containerPins[1], miniPlayer, safe.right + PLXCapsuleSideMargin, NO);
+    PLXSetPinInset(state.containerPins[2], miniPlayer, bottom, NO);
+
+    CGFloat cardHeight = state.cardHeight ? PLXCardHeight : CGRectGetHeight(miniPlayer.bounds);
+    CGFloat radius = cardHeight / 2;
+    if (@available(iOS 26.0, *)) {
+        state.glass.cornerConfiguration = [UICornerConfiguration configurationWithUniformRadius:[UICornerRadius fixedRadius:radius]];
+    } else {
+        state.glass.layer.cornerRadius = radius;
+    }
+    miniPlayer.layer.cornerRadius = radius;
+    PLXSetConstant(state.top, PLXCardInset);
+    PLXSetConstant(state.bottom, PLXCardInset);
+    PLXSetConstant(state.leading, PLXCapsuleLeadingInset);
+    PLXSetConstant(state.trailing, 0);
+
+    // Padding so screens scroll clear of the capsule. A tab bar's own height
+    // is already padded for (by Plex, or by the tab bar code for Plex
+    // Reborn's tabs), so only the capsule and its gaps are added above it.
+    BOOL shown = !container.hidden && !miniPlayer.hidden && CGRectGetMinY(container.frame) < height - 1;
+    CGFloat inset = bar ? cardHeight + 2 * PLXCardGap : MAX(0, cardHeight + bottom + PLXCardGap - safe.bottom);
+    PLXSetAddedBottomInset(state, shown ? inset : 0);
+}
+
+void PLXMiniPlayersNeedLayout(UIWindow *window) {
+    NSMutableArray<UIView *> *players = [NSMutableArray array];
+    PLXFindMiniPlayers(window, players);
+    for (UIView *player in players) {
+        if (PLXMiniPlayerFloats(player)) [player setNeedsLayout];
+    }
 }
 
 #pragma mark - Layout
@@ -305,10 +385,12 @@ static void PLXUpdateMiniPlayer(UIView *view) {
     PLXMiniPlayerState *state = PLXInstallMiniPlayerGuide(view);
     if (!state) return;
     NSInteger edge = PLXVerticalBarEdge(view);
-    NSInteger style = edge == 0 ? PLXMiniPlayerPlex : PLXSettingInteger(PLXSettingMiniPlayerStyle);
+    NSInteger style = PLXSettingInteger(PLXSettingMiniPlayerStyle);
+    if (edge == 0 && style == PLXMiniPlayerFullWidth) style = PLXMiniPlayerPlex;
 
     if (style == PLXMiniPlayerFloatingCard && (state.floating || PLXStartFloating(view, state))) {
-        PLXLayoutFloating(view, state, edge);
+        if (edge == 0) PLXLayoutCapsule(view, state);
+        else PLXLayoutFloating(view, state, edge);
         return;
     }
     PLXStopFloating(view, state);

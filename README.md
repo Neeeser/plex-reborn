@@ -23,6 +23,7 @@ Download `PlexReborn-<version>.ipa` from the [latest release](https://github.com
 - **Your own tabs**: Pick up to 5 tabs from Home's tabs and the side menu, such as Home, TV Shows, Movies and Live TV. They show in the tab bar at the bottom, or in the vertical bar on iPhone Duo (Settings > Plex Reborn > Tabs)
 - **Library tabs menu**: A library's Recommended, Library and Categories become one button with a menu instead of a second tab bar (Settings > Plex Reborn > Tabs > Library tabs)
 - **Remembered library view**: Each library opens on the tab you last picked, such as Library instead of Recommended
+- **Floating mini player**: The mini player is a glass capsule floating above the tab bar instead of Plex's flat bar, and pages scroll clear of both (Settings > Plex Reborn > Interface > Mini Player)
 - **Glass player controls**: The player's buttons sit on glass over the video instead of Plex's gray bars, with the bottom controls in one panel sized to the controls. Every control stays where it was (Settings > Plex Reborn > Player > Glass controls)
 
 ### iPhone Duo Specific Features
@@ -32,14 +33,13 @@ Download `PlexReborn-<version>.ipa` from the [latest release](https://github.com
 - Plex's tabs, top bar buttons and library tabs move into the Duo's vertical bar
 - The title bar is clear, hides while scrolling, and the first screen of each tab starts at the top of the screen without a title
 - Poster rows and the Live TV guide run under the vertical bar to the screen edge (Settings > Plex Reborn > Interface)
-- The mini player becomes a floating glass card beside the vertical bar's tabs (Settings > Plex Reborn > Interface > Mini Player)
+- The floating mini player becomes a glass card beside the vertical bar's tabs (Settings > Plex Reborn > Interface > Mini Player)
 - Plex's own sheets, such as the server picker, reach the screen edge
 - The Duo's second panel is no longer mistaken for an external TV
 
 ## Known Issues
 
 - Staying signed in has only been tested with one Apple ID so far. If Plex asks you to sign in again after every launch, open an issue
-- Without a vertical bar (most iPhones, and the Duo unfolded in portrait), the mini player is Plex's full-width bar, not the floating card
 - Hiding Plex's online content covers the side menu, the More page, Home and the Live TV guide; search results can still include Plex's online titles
 - With your own tabs, the tab bar's selection does not always follow screens opened from the side menu
 - In desk posture, Home's poster rows run across the crease
@@ -99,7 +99,7 @@ The add-on's source is in `src/`:
 | Title bar | `src/PlexDuoTitleBar.m` | Clear title bar that hides while scrolling; no title on each tab's first screen |
 | Posters under the bar | `src/PlexDuoContentUnderBar.m` | Poster rows scroll under the vertical bar; scroll bars hidden |
 | Live TV guide | `src/PlexDuoLiveTV.m` | The guide runs under the vertical bar to the screen edge |
-| Mini player | `src/PlexDuoMiniPlayer.m` | Floating glass card, full-width bar or Plex's bar |
+| Mini player | `src/PlexDuoMiniPlayer.m` | Floating glass capsule above the tab bar or card beside the vertical bar, full-width bar, or Plex's bar |
 | Online content | `src/PlexHideOnlineContent.m` | Hides Plex's online sources from the side menu and Home |
 | Local artwork | `src/PlexLocalImages.m` | Loads artwork from local-network addresses (such as an IPTV tool's channel logos) directly, which Plex Media Server will not resize |
 | Stream keep-alive | `src/PlexStreamKeepAlive.m` | Retries a failed transcode keep-alive check on a fresh connection before Plex restarts the stream |
@@ -114,6 +114,10 @@ The add-on's source is in `src/`:
 1. Update `VERSION` and add a `## [v<version>] - <date>` section at the top of `CHANGELOG.md`.
 2. Run `scripts/package-release.sh` and test the IPA on a device.
 3. Run `scripts/package-release.sh --publish "<summary>"`. It creates a draft release tagged `v8.45_<version>` and titled `v<version> - <summary>`, with the changelog section as its notes and the IPA and add-on attached. Review the draft and publish it on GitHub.
+
+## License
+
+Plex-Reborn's own code is licensed under the [GNU General Public License v3.0](LICENSE).
 
 ## Legal
 

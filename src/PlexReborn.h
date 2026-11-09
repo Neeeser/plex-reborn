@@ -54,6 +54,10 @@ BOOL PLXMiniPlayerFloats(UIView *miniPlayer);
 // PMMiniPlayerViewFullSize on regular-width ones (unfolded landscape).
 BOOL PLXIsMiniPlayerView(UIView *view);
 
+// Asks floating mini players in the window to lay out again, when a tab bar
+// along the bottom appears, moves or goes away.
+void PLXMiniPlayersNeedLayout(UIWindow *window);
+
 // Width of the vertical bar's column (12 pt padding, 48 pt bar, 24 pt to the
 // edge). The folded screen reserves it as a safe-area inset; the unfolded
 // screen does not, so code that sits beside the bar uses at least this much.

@@ -534,6 +534,43 @@ static void PLXReserveVerticalBarColumn(UIViewController *host, UIWindow *window
     if (!UIEdgeInsetsEqualToEdgeInsets(host.additionalSafeAreaInsets, extra)) host.additionalSafeAreaInsets = extra;
 }
 
+// Plex Reborn's tab bar is an overlay, so Plex's screens did not know about
+// it and the end of a long page stayed behind it. At the bottom edge the
+// main navigation controller gets bottom padding for the bar (only the part
+// above the safe area its screens already keep clear).
+static const void *PLXTabsInsetKey = &PLXTabsInsetKey;
+
+// Plex's main navigation controller, one or more levels below the root (PMAppViewController > PMUNORootViewController).
+static UINavigationController *PLXMainNavigation(UIViewController *parent, UIViewController *skip) {
+    for (UIViewController *child in parent.childViewControllers) {
+        if (child == skip) continue;
+        if ([child isKindOfClass:UINavigationController.class]) return (UINavigationController *)child;
+        UINavigationController *found = PLXMainNavigation(child, skip);
+        if (found) return found;
+    }
+    return nil;
+}
+
+static void PLXSetContentInsetForTabs(UIViewController *root, UITabBarController *controller, BOOL atBottom) {
+    UIWindow *window = root.view.window;
+    UINavigationController *nav = PLXMainNavigation(root, controller);
+    for (UIViewController *child in nav ? @[nav] : @[]) {
+        CGFloat added = [objc_getAssociatedObject(child, PLXTabsInsetKey) doubleValue];
+        CGFloat wanted = 0;
+        if (atBottom && window && !controller.view.hidden) {
+            CGRect bar = [controller.tabBar convertRect:controller.tabBar.bounds toView:window];
+            CGRect content = [child.view convertRect:child.view.bounds toView:window];
+            CGFloat safeInside = MAX(0, window.safeAreaInsets.bottom - (CGRectGetMaxY(window.bounds) - CGRectGetMaxY(content)));
+            wanted = MAX(0, CGRectGetMaxY(content) - CGRectGetMinY(bar) - safeInside);
+        }
+        if (fabs(wanted - added) < 0.5) continue;
+        UIEdgeInsets insets = child.additionalSafeAreaInsets;
+        insets.bottom = MAX(0, insets.bottom + wanted - added);
+        child.additionalSafeAreaInsets = insets;
+        objc_setAssociatedObject(child, PLXTabsInsetKey, @(wanted), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+}
+
 static void PLXUpdateCustomTabs(UIWindow *window) {
     NSInteger edge = 0;
     if (@available(iOS 27.1, *)) edge = window ? window.traitCollection.verticalBarEdge : 0;
@@ -542,7 +579,12 @@ static void PLXUpdateCustomTabs(UIWindow *window) {
     if (edge != 0 && library && PLXPlexBarShowing(library) && PLXSettingInteger(PLXSettingLibraryTabs) == PLXLibraryTabsVerticalBar) show = NO;
     if (edge == 0 && PLXBottomLibraryBar && PLXPlexBarShowing(PLXBottomLibraryBar)) show = NO;
     UIViewController *root = window.rootViewController;
-    if (!show || !root) { PLXCustom.controller.view.hidden = YES; return; }
+    if (!show || !root) {
+        PLXCustom.controller.view.hidden = YES;
+        if (root && PLXCustom) PLXSetContentInsetForTabs(root, PLXCustom.controller, NO);
+        if (window) PLXMiniPlayersNeedLayout(window);
+        return;
+    }
     if (!PLXCustom) {
         PLXCustom = [PLXCustomTabs new];
         PLXCustom.controller = [UITabBarController new];
@@ -569,6 +611,9 @@ static void PLXUpdateCustomTabs(UIWindow *window) {
     if (miniPlayerTop < CGRectGetMaxY(frame)) frame.size.height = MAX(0, miniPlayerTop);
     if (!CGRectEqualToRect(controller.view.frame, frame)) controller.view.frame = frame;
     if (root.view.subviews.lastObject != controller.view) [root.view bringSubviewToFront:controller.view];
+    if (edge == 0) [controller.view layoutIfNeeded];
+    PLXSetContentInsetForTabs(root, controller, edge == 0);
+    PLXMiniPlayersNeedLayout(window);
 }
 
 static void PLXUpdateNativeTabs(UITabBar *tabBar) {
@@ -677,10 +722,8 @@ static void PLXUpdateNativeTabs(UITabBar *tabBar) {
 static const void *PLXSuppressedInsetKey = &PLXSuppressedInsetKey;
 
 static void PLXUpdatePlexBarInset(UITabBar *bar) {
-    // At the bottom edge the system tab bar takes the hidden bar's place, so the padding stays.
-    NSInteger edge = 0;
-    if (@available(iOS 27.1, *)) edge = bar.window ? bar.window.traitCollection.verticalBarEdge : 0;
-    BOOL hidden = edge != 0 && objc_getAssociatedObject(bar, @selector(alpha)) != nil && bar.alpha < 0.01 && bar.window;
+    // At the bottom edge Plex Reborn's own tab bar pads the screens for itself (PLXSetContentInsetForTabs).
+    BOOL hidden = objc_getAssociatedObject(bar, @selector(alpha)) != nil && bar.alpha < 0.01 && bar.window;
     UIResponder *responder = bar.superview.nextResponder;
     if (![responder isKindOfClass:UIViewController.class]) return;
     for (UIViewController *child in ((UIViewController *)responder).childViewControllers) {
@@ -707,6 +750,7 @@ static void PLXTabBarLayoutSubviews(UITabBar *self, SEL _cmd) {
     ((void (*)(id, SEL))PLXOrigTabBarLayout)(self, _cmd);
     PLXUpdateNativeTabs(self);
     PLXUpdatePlexBarInset(self);
+    if (self.window) PLXMiniPlayersNeedLayout(self.window);
 }
 
 static IMP PLXOrigTabBarSetHidden;
@@ -727,6 +771,8 @@ static void PLXTabBarDidMoveToWindow(UITabBar *self, SEL _cmd) {
     if (self.window) PLXUpdateNativeTabs(self);
     else tabs.controller.view.hidden = YES;
     if (!self.window && PLXCustom) PLXUpdateCustomTabs(PLXMainWindow());
+    UIWindow *window = self.window ?: PLXMainWindow();
+    if (window) PLXMiniPlayersNeedLayout(window);
 }
 
 static IMP PLXOrigTabBarSetSelectedItem;
