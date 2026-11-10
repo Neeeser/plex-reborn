@@ -30,22 +30,53 @@ CGRect PLXDeskPostureFold(UIView *view) {
 }
 
 static const void *PLXHingeInteractionKey = &PLXHingeInteractionKey;
+static const void *PLXHingeAngleKey = &PLXHingeAngleKey;
+#if TARGET_OS_SIMULATOR
+static __weak UIView *PLXHingeTestView;
+#endif
 
 // Folding without rotating leaves the view's size unchanged, so nothing would
-// re-run layout. A hinge listener asks for layout whenever the posture changes.
+// re-run layout. A hinge listener asks for layout whenever the posture changes,
+// and keeps the hinge's latest angle for the desk reflection.
 static void PLXObserveHinge(UIView *view) {
     if (@available(iOS 27.1, *)) {
         if (objc_getAssociatedObject(view, PLXHingeInteractionKey)) return;
         __weak UIView *weakView = view;
         UIHingeInteraction *hinge = [[UIHingeInteraction alloc] initWithUpdateHandler:^(UIHingeInteraction *interaction, UIHingeInteractionUpdate *update) {
             UIView *strongView = weakView;
+            if (strongView && update.hinge) {
+                objc_setAssociatedObject(strongView, PLXHingeAngleKey, @(update.hinge.angle), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+#if TARGET_OS_SIMULATOR
+                NSLog(@"PlexReborn: hinge status=%ld angle=%.1f", (long)update.hinge.status, update.hinge.angle);
+#endif
+            }
             [strongView setNeedsLayout];
             [strongView.superview setNeedsLayout];
         }];
         [view addInteraction:hinge];
         objc_setAssociatedObject(view, PLXHingeInteractionKey, hinge, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
+#if TARGET_OS_SIMULATOR
+    PLXHingeTestView = view;
+#endif
 }
+
+#if TARGET_OS_SIMULATOR
+#import <notify.h>
+// The simulator has one half-open angle. To see the reflection at others,
+// write degrees to Library/PlexHingeAngle.txt and post plexreborn.hingeangle.
+__attribute__((constructor)) static void PLXInstallHingeAngleTest(void) {
+    int token;
+    notify_register_dispatch("plexreborn.hingeangle", &token, dispatch_get_main_queue(), ^(int t) {
+        NSString *path = [NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:@"PlexHingeAngle.txt"];
+        double degrees = [[NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:nil] doubleValue];
+        UIView *view = PLXHingeTestView;
+        objc_setAssociatedObject(view, PLXHingeAngleKey, @(degrees * M_PI / 180), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        [view setNeedsLayout];
+        NSLog(@"PlexReborn: test hinge angle %.0f degrees", degrees);
+    });
+}
+#endif
 
 static const void *PLXOriginalTopConstantKey = &PLXOriginalTopConstantKey;
 
@@ -195,25 +226,46 @@ static void PLXLayoutReflection(UIView *playbackView, UIView *container, CGRect 
     // stops joined by straight ramps changed slope abruptly where the ramps
     // met, and the eye read each slope change as a gray line across the
     // reflection.
+    //
+    // Like Netflix's, the reflection follows the hinge: none with the phone
+    // nearly flat, growing as it folds toward a laptop shape, full strength
+    // from 120 degrees down. Opened wider it is both dimmer and shorter.
+    // UIHinge reports the angle between the halves in radians (the
+    // simulator's half-open pose reads 2.3, about 132 degrees).
+    NSNumber *angle = objc_getAssociatedObject(playbackView, PLXHingeAngleKey);
+    CGFloat degrees = angle.doubleValue * 180 / M_PI;
+    CGFloat strength = angle ? PLXSmoothstep(170, 120, degrees) : 1;
+    CGFloat reach = 0.6 + 0.4 * strength;
     CGFloat start = height > 0 ? reflectionTop / height : 0;
-    CGFloat peak = start + 0.25, end = 0.78;
+    CGFloat peak = start + 0.25 * reach, end = start + (0.78 - start) * reach;
+    CGFloat lightest = 1 - 0.8 * strength, bottom = MAX(0.95, lightest);
     NSMutableArray *colors = [NSMutableArray array], *locations = [NSMutableArray array];
     const int steps = 32;
     for (int i = 0; i <= steps; i++) {
         CGFloat y = (CGFloat)i / steps, alpha;
         if (y <= start) alpha = 1;
-        else if (y <= peak) alpha = 1 - 0.8 * PLXSmoothstep(start, peak, y);
-        else alpha = 0.2 + 0.75 * PLXSmoothstep(peak, end, y);
+        else if (y <= peak) alpha = 1 - (1 - lightest) * PLXSmoothstep(start, peak, y);
+        else alpha = lightest + (bottom - lightest) * PLXSmoothstep(peak, end, y);
         [colors addObject:(id)[UIColor colorWithWhite:0 alpha:alpha].CGColor];
         [locations addObject:@(y)];
     }
     CAGradientLayer *gradient = (CAGradientLayer *)shade.layer.sublayers.firstObject;
+    BOOL first = gradient.colors == nil;
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
     gradient.frame = shade.bounds;
-    gradient.colors = colors;
-    gradient.locations = locations;
+    if (first) { gradient.colors = colors; gradient.locations = locations; }
     [CATransaction commit];
+    // Hinge updates come at no fixed rate, so a change eases in over a fifth
+    // of a second instead of jumping between updates.
+    if (!first && (![gradient.colors isEqualToArray:colors] || ![gradient.locations isEqualToArray:locations])) {
+        [CATransaction begin];
+        [CATransaction setAnimationDuration:0.2];
+        [CATransaction setAnimationTimingFunction:[CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut]];
+        gradient.colors = colors;
+        gradient.locations = locations;
+        [CATransaction commit];
+    }
 }
 
 // Plex lays out the player inside its animation that fades the controls in
