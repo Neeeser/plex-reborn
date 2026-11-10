@@ -139,14 +139,14 @@ static UIView *PLXReflectionView(UIView *playbackView, UIView *source) {
     blur.tag = 2;
     [root addSubview:blur];
 
-    // Like Netflix's: strongest at the crease and mostly dark by the middle
-    // of the lower half, where the controls' text sits.
+    // Black over the reflection, shaped in PLXLayoutReflection.
     UIView *shade = [UIView new];
     shade.tag = 3;
     CAGradientLayer *gradient = [CAGradientLayer layer];
-    gradient.colors = @[(id)[UIColor colorWithWhite:0 alpha:0.2].CGColor, (id)[UIColor colorWithWhite:0 alpha:0.6].CGColor,
-                        (id)[UIColor colorWithWhite:0 alpha:0.88].CGColor];
-    gradient.locations = @[@0, @0.45, @1];
+    gradient.colors = @[(id)UIColor.blackColor.CGColor, (id)UIColor.blackColor.CGColor,
+                        (id)[UIColor colorWithWhite:0 alpha:0.55].CGColor, (id)[UIColor colorWithWhite:0 alpha:0.2].CGColor,
+                        (id)[UIColor colorWithWhite:0 alpha:0.45].CGColor, (id)[UIColor colorWithWhite:0 alpha:0.85].CGColor,
+                        (id)[UIColor colorWithWhite:0 alpha:0.95].CGColor];
     [shade.layer addSublayer:gradient];
     [root addSubview:shade];
 
@@ -166,21 +166,35 @@ static void PLXLayoutReflection(UIView *playbackView, UIView *container, CGRect 
     root.frame = CGRectMake(CGRectGetMinX(container.frame), top, CGRectGetWidth(container.frame), CGRectGetHeight(playbackView.bounds) - top);
 
     // The portal shows the video container's picture at the container's size,
-    // flipped so the picture's bottom edge meets the crease.
+    // flipped across the hinge, the middle of the crease band: the picture
+    // stops at the band's top, so its reflection starts the same distance
+    // below the hinge. Mirrored at the band's top instead, the reflection
+    // began on the upright half, above the real crease, and read as a panel
+    // placed there rather than a reflection.
     UIView *portal = [root viewWithTag:1];
     CGSize videoSize = container.bounds.size;
+    CGFloat height = CGRectGetHeight(root.bounds);
+    CGFloat reflectionTop = MAX(0, 2 * CGRectGetMidY(fold) - CGRectGetMaxY(container.frame) - top);
     portal.transform = CGAffineTransformIdentity;
     portal.bounds = CGRectMake(0, 0, videoSize.width, videoSize.height);
-    portal.center = CGPointMake(videoSize.width / 2, videoSize.height / 2);
+    portal.center = CGPointMake(videoSize.width / 2, reflectionTop + videoSize.height / 2);
     portal.transform = CGAffineTransformMakeScale(1, -1);
     UIVisualEffectView *blur = (UIVisualEffectView *)[root viewWithTag:2];
     blur.frame = root.bounds;
     PLXRemoveBlurTint(blur);
     UIView *shade = [root viewWithTag:3];
     shade.frame = root.bounds;
+    // The reflection fades in from black instead of starting at a hard edge
+    // or after a black strip, both of which drew the eye to where it begins.
+    // Like Netflix's (measured from hands-on videos), it is strongest about a
+    // quarter to a third of the way down the lower half and mostly dark past
+    // the middle, where the controls' text sits.
+    CGFloat start = height > 0 ? reflectionTop / height : 0;
+    CAGradientLayer *gradient = (CAGradientLayer *)shade.layer.sublayers.firstObject;
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
-    shade.layer.sublayers.firstObject.frame = shade.bounds;
+    gradient.frame = shade.bounds;
+    gradient.locations = @[@0, @(start), @(start + 0.1), @(start + 0.25), @0.5, @0.68, @1];
     [CATransaction commit];
 }
 
