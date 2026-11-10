@@ -29,4 +29,12 @@ while IFS= read -r -d '' f; do
   n=$((n + 1))
 done < <(find "$SIM_APP" -type f -print0)
 echo "Converted $n binaries to the simulator platform."
+
+# Shaders get the same treatment; without it Plex's home background stays black.
+if xcrun -sdk iphonesimulator metal --version >/dev/null 2>&1; then
+  find "$SIM_APP" -name '*.metallib' -exec python3 -I "$PROJ/scripts/shaders-for-simulator.py" {} \;
+else
+  echo "Metal toolchain missing, so shaders stay device-only (black home background)."
+  echo "Install it with: xcodebuild -downloadComponent MetalToolchain"
+fi
 "$PROJ/scripts/build-sim.sh"

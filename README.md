@@ -84,7 +84,8 @@ Copy `config.example.sh` to `config.local.sh` and fill it in, and put the decryp
 | `scripts/make-device-app.sh` | Builds the add-on and patches the IPA into `work/device` |
 | `scripts/make-signing-profile.sh` | Once per bundle ID: has Xcode create a signing profile |
 | `scripts/build-device.sh` | Rebuilds the add-on into the device app, signs it and installs it on your phone |
-| `scripts/make-simulator-app.sh` | Converts the device app for the simulator, then runs `build-sim.sh` |
+| `scripts/make-simulator-app.sh` | Converts the device app and its shaders for the simulator, then runs `build-sim.sh` |
+| `scripts/shaders-for-simulator.py` | Rebuilds an app's Metal shaders for the simulator, which refuses shaders built for iPhones. Needs Apple's Metal toolchain (`xcodebuild -downloadComponent MetalToolchain`) |
 | `scripts/build-sim.sh` | Rebuilds the add-on for the simulator, installs and launches it |
 | `scripts/view-dump.sh` | Saves the running simulator app's screens, windows and views to `logs/` |
 | `scripts/engine.sh` | Sends a playback command (seek, skip, pause, resume, a fake early end, status) to the simulator app's current video |
