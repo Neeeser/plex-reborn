@@ -142,16 +142,17 @@ static UIView *PLXReflectionView(UIView *playbackView, UIView *source) {
     // Black over the reflection, shaped in PLXLayoutReflection.
     UIView *shade = [UIView new];
     shade.tag = 3;
-    CAGradientLayer *gradient = [CAGradientLayer layer];
-    gradient.colors = @[(id)UIColor.blackColor.CGColor, (id)UIColor.blackColor.CGColor,
-                        (id)[UIColor colorWithWhite:0 alpha:0.55].CGColor, (id)[UIColor colorWithWhite:0 alpha:0.2].CGColor,
-                        (id)[UIColor colorWithWhite:0 alpha:0.45].CGColor, (id)[UIColor colorWithWhite:0 alpha:0.85].CGColor,
-                        (id)[UIColor colorWithWhite:0 alpha:0.95].CGColor];
-    [shade.layer addSublayer:gradient];
+    [shade.layer addSublayer:[CAGradientLayer layer]];
     [root addSubview:shade];
 
     objc_setAssociatedObject(playbackView, PLXReflectionKey, root, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     return root;
+}
+
+// 0 below a, 1 above b, an S-curve between with zero slope at both ends.
+static CGFloat PLXSmoothstep(CGFloat a, CGFloat b, CGFloat x) {
+    CGFloat t = MIN(1, MAX(0, (x - a) / (b - a)));
+    return t * t * (3 - 2 * t);
 }
 
 static void PLXLayoutReflection(UIView *playbackView, UIView *container, CGRect fold, BOOL desk) {
@@ -189,12 +190,29 @@ static void PLXLayoutReflection(UIView *playbackView, UIView *container, CGRect 
     // Like Netflix's (measured from hands-on videos), it is strongest about a
     // quarter to a third of the way down the lower half and mostly dark past
     // the middle, where the controls' text sits.
+    //
+    // The darkness follows smoothstep curves sampled at many stops. A few
+    // stops joined by straight ramps changed slope abruptly where the ramps
+    // met, and the eye read each slope change as a gray line across the
+    // reflection.
     CGFloat start = height > 0 ? reflectionTop / height : 0;
+    CGFloat peak = start + 0.25, end = 0.78;
+    NSMutableArray *colors = [NSMutableArray array], *locations = [NSMutableArray array];
+    const int steps = 32;
+    for (int i = 0; i <= steps; i++) {
+        CGFloat y = (CGFloat)i / steps, alpha;
+        if (y <= start) alpha = 1;
+        else if (y <= peak) alpha = 1 - 0.8 * PLXSmoothstep(start, peak, y);
+        else alpha = 0.2 + 0.75 * PLXSmoothstep(peak, end, y);
+        [colors addObject:(id)[UIColor colorWithWhite:0 alpha:alpha].CGColor];
+        [locations addObject:@(y)];
+    }
     CAGradientLayer *gradient = (CAGradientLayer *)shade.layer.sublayers.firstObject;
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
     gradient.frame = shade.bounds;
-    gradient.locations = @[@0, @(start), @(start + 0.1), @(start + 0.25), @0.5, @0.68, @1];
+    gradient.colors = colors;
+    gradient.locations = locations;
     [CATransaction commit];
 }
 
