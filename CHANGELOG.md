@@ -52,5 +52,8 @@ All notable changes to this project will be documented in this file.
 - Stop a transcoded stream that **ends early** from finishing the episode and rewinding to the start; it now restarts where it stopped
 - Stop **streams restarting** when one of Plex's 30-second keep-alive checks fails, which over Plex's relay happened every few minutes and showed as a pause, a reload and a reset zoom; a failed check is now retried on a fresh connection, and the stream restarts only if the server has really ended it
 - Keep **your own tabs** when Plex's Home has a single tab, which happens when Plex's online media sources are turned off for the account
+- Stop the app **freezing and closing** when an iPhone Duo is folded or unfolded during playback; Plex's video renderer and the screen change each waited for the other until iOS ended the app
+- Start Home's rows **at the top of the screen** on an unfolded iPhone Duo, as on the folded screen, instead of below an empty band
+- Keep the **reflection below the crease** steady when the player's controls fade, start it below the hinge with a gradual fade-in, and keep the video's colors in it
 
 [v1.0.0]: https://github.com/Neeeser/plex-reborn/releases/tag/v8.45_1.0.0
