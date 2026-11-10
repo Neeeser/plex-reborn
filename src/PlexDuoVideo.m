@@ -77,11 +77,6 @@ static void PLXShiftTopEdge(UIView *view, UIView *parent, CGFloat shift) {
 // half continues the video instead of being a flat panel. UIKit's portal view
 // (private _UIPortalView) draws another view's live rendering, video
 // included, so nothing is copied frame by frame.
-//
-// The blur is a plain Gaussian blur on the portal (Core Animation's private
-// CAFilter), which keeps the picture's colors. The system's dark material
-// blur, used before, tinted the reflection gray and halved its brightness, so
-// it read as a separate gray panel instead of a reflection.
 static const void *PLXReflectionKey = &PLXReflectionKey;
 
 static UIView *PLXReflectionView(UIView *playbackView, UIView *source) {
@@ -101,24 +96,15 @@ static UIView *PLXReflectionView(UIView *playbackView, UIView *source) {
     portal.tag = 1;
     [root addSubview:portal];
 
-    Class filterClass = NSClassFromString(@"CAFilter");
-    id filter = [filterClass respondsToSelector:@selector(filterWithType:)] ? [filterClass performSelector:@selector(filterWithType:) withObject:@"gaussianBlur"] : nil;
-    if (filter) {
-        [filter setValue:@30 forKey:@"inputRadius"];
-        [filter setValue:@YES forKey:@"inputNormalizeEdges"];
-        portal.layer.filters = @[filter];
-    } else {
-        UIVisualEffectView *blur = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark]];
-        blur.tag = 2;
-        [root addSubview:blur];
-    }
+    UIVisualEffectView *blur = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark]];
+    blur.tag = 2;
+    [root addSubview:blur];
 
-    // Close to the picture's own brightness at the crease, darker toward the
-    // bottom, where the controls' text sits.
+    // Darker toward the bottom, where the controls' text sits.
     UIView *shade = [UIView new];
     shade.tag = 3;
     CAGradientLayer *gradient = [CAGradientLayer layer];
-    gradient.colors = @[(id)[UIColor colorWithWhite:0 alpha:0.1].CGColor, (id)[UIColor colorWithWhite:0 alpha:0.7].CGColor];
+    gradient.colors = @[(id)[UIColor colorWithWhite:0 alpha:0.25].CGColor, (id)[UIColor colorWithWhite:0 alpha:0.75].CGColor];
     [shade.layer addSublayer:gradient];
     [root addSubview:shade];
 
@@ -138,17 +124,12 @@ static void PLXLayoutReflection(UIView *playbackView, UIView *container, CGRect 
     root.frame = CGRectMake(CGRectGetMinX(container.frame), top, CGRectGetWidth(container.frame), CGRectGetHeight(playbackView.bounds) - top);
 
     // The portal shows the video container's picture at the container's size,
-    // flipped across the hinge. The crease region is a band centered on the
-    // hinge; the picture stops at its top, so its reflection starts the same
-    // distance below the hinge, at the band's bottom. Mirroring at the band's
-    // top put the reflection's edge above the real crease.
+    // flipped so the picture's bottom edge meets the crease.
     UIView *portal = [root viewWithTag:1];
     CGSize videoSize = container.bounds.size;
-    CGFloat hinge = CGRectGetMidY(fold);
-    CGFloat reflectionTop = 2 * hinge - CGRectGetMaxY(container.frame) - top;
     portal.transform = CGAffineTransformIdentity;
     portal.bounds = CGRectMake(0, 0, videoSize.width, videoSize.height);
-    portal.center = CGPointMake(videoSize.width / 2, reflectionTop + videoSize.height / 2);
+    portal.center = CGPointMake(videoSize.width / 2, videoSize.height / 2);
     portal.transform = CGAffineTransformMakeScale(1, -1);
     [root viewWithTag:2].frame = root.bounds;
     UIView *shade = [root viewWithTag:3];
