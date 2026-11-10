@@ -112,7 +112,7 @@ static UIView *PLXReflectionView(UIView *playbackView, UIView *source) {
     return root;
 }
 
-static void PLXUpdateReflection(UIView *playbackView, UIView *container, CGRect fold, BOOL desk) {
+static void PLXLayoutReflection(UIView *playbackView, UIView *container, CGRect fold, BOOL desk) {
     BOOL on = desk && container && PLXSettingBool(PLXSettingDeskReflection);
     UIView *existing = objc_getAssociatedObject(playbackView, PLXReflectionKey);
     if (!on) { existing.hidden = YES; return; }
@@ -138,6 +138,14 @@ static void PLXUpdateReflection(UIView *playbackView, UIView *container, CGRect 
     [CATransaction setDisableActions:YES];
     shade.layer.sublayers.firstObject.frame = shade.bounds;
     [CATransaction commit];
+}
+
+// Plex lays out the player inside its animation that fades the controls in
+// and out. Laid out there, the portal's flip (reset to identity, then flipped
+// again) animated through a zero height, so the reflection vanished for the
+// length of the fade on every tap. The reflection is laid out without animation.
+static void PLXUpdateReflection(UIView *playbackView, UIView *container, CGRect fold, BOOL desk) {
+    [UIView performWithoutAnimation:^{ PLXLayoutReflection(playbackView, container, fold, desk); }];
 }
 
 // Plex pins the progress bar to the player's safe area, which stops it at the

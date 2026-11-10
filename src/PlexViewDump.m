@@ -104,6 +104,9 @@ static void PLXDumpAll(void) {
                 for (UIViewReservedRegion *region in [window reservedRegionsOfKind:[UIViewReservedRegionKind divisionRegionKind] options:UIViewReservedRegionQueryOptionsIncludeInactive]) {
                     [out appendFormat:@"FOLD frame=%@ active=%d desk=%@\n", NSStringFromCGRect(region.frame), region.isActive, NSStringFromCGRect(PLXDeskPostureFold(window))];
                 }
+                for (UIViewReservedRegion *region in [window reservedRegionsOfKind:[UIViewReservedRegionKind occlusionRegionKind] options:UIViewReservedRegionQueryOptionsIncludeInactive]) {
+                    [out appendFormat:@"OCCLUDED frame=%@ margins=%@ active=%d\n", NSStringFromCGRect(region.frame), NSStringFromUIEdgeInsets(region.margins), region.isActive];
+                }
             }
             [out appendFormat:@"WINDOW screen=%p %@ level=%.0f key=%d root=%@ safeArea=%@\n", window.screen, NSStringFromClass(window.class), window.windowLevel,
                 window.isKeyWindow, NSStringFromClass(window.rootViewController.class), NSStringFromUIEdgeInsets(window.safeAreaInsets)];

@@ -124,7 +124,8 @@ static void PLXTitleBarLayoutSubviews(UINavigationBar *self, SEL _cmd) {
 // bar, and the vertical bar's selected tab already names the screen. On the
 // short folded screen that title cost 82 pt above the first row. While the
 // clear title bar is on, the first screen's title is hidden and its content
-// starts where the window's safe area does. The bar itself stays: it is what
+// starts where the window's safe area does (unfolded, at the top; see
+// PLXContentTopInset). The bar itself stays: it is what
 // puts the screen's buttons in the vertical bar. Screens opened from there
 // keep their title. Sheets (Settings, pickers) are left alone.
 static const void *PLXRootTitleKey = &PLXRootTitleKey;
@@ -139,6 +140,22 @@ static BOOL PLXIsTitleOnlyItem(UIBarButtonItem *item) {
     return NO;
 }
 
+// Where content may start at the top of the window. Unfolded, the window has
+// no inset on the vertical bar's side; its top inset only keeps content clear
+// of the clock that sits at the top of the bar's column, and rows already run
+// under that column. Folded, the window's top inset is 0 and the bar's column
+// is a side inset. With the bar on the leading side the clock would sit above
+// the row titles, so the top inset stays.
+static CGFloat PLXContentTopInset(UIWindow *window) {
+    UIEdgeInsets safe = window.safeAreaInsets;
+    if (@available(iOS 27.1, *)) {
+        BOOL rtl = window.effectiveUserInterfaceLayoutDirection == UIUserInterfaceLayoutDirectionRightToLeft;
+        CGFloat barSide = rtl ? safe.left : safe.right;
+        if (window.traitCollection.verticalBarEdge == UIVerticalBarEdgeTrailing && barSide == 0) return 0;
+    }
+    return safe.top;
+}
+
 static void PLXUpdateRootTitle(UINavigationController *nav, UIViewController *controller, UINavigationBar *bar) {
     // Only screens whose title is Plex's label item, which can be hidden. The
     // More page is the first screen of its own stack but has a standard title
@@ -148,7 +165,7 @@ static void PLXUpdateRootTitle(UINavigationController *nav, UIViewController *co
     BOOL hide = controller && controller == nav.viewControllers.firstObject && !nav.presentingViewController
         && !nav.navigationBarHidden && hasTitleItem && PLXClearTitleBarOn(nav.view.window);
     NSNumber *applied = objc_getAssociatedObject(controller, PLXRootTitleKey);
-    CGFloat shift = hide ? MAX(0, CGRectGetMaxY(bar.frame) - nav.view.window.safeAreaInsets.top) : 0;
+    CGFloat shift = hide ? MAX(0, CGRectGetMaxY(bar.frame) - PLXContentTopInset(nav.view.window)) : 0;
     for (UIBarButtonItem *item in controller.navigationItem.leftBarButtonItems) {
         if (PLXIsTitleOnlyItem(item) && item.customView.hidden != hide) item.customView.hidden = hide;
     }
