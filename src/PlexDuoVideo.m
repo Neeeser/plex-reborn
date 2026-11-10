@@ -77,7 +77,46 @@ static void PLXShiftTopEdge(UIView *view, UIView *parent, CGFloat shift) {
 // half continues the video instead of being a flat panel. UIKit's portal view
 // (private _UIPortalView) draws another view's live rendering, video
 // included, so nothing is copied frame by frame.
+//
+// The blur is a system blur view with its gray tint removed. The view's
+// backdrop layer samples whatever is drawn under it every frame, video
+// included, and its tint is a separate subview; with that subview hidden and
+// only a saturation boost and a Gaussian blur left on the backdrop, the
+// reflection keeps the picture's colors (the material made it read as a gray
+// panel). A blur filter set on the portal itself kept the colors but froze
+// the reflection between layout passes, since that filter caches the video it
+// samples. The tint comes back on trait changes, so it is removed again on
+// every layout.
 static const void *PLXReflectionKey = &PLXReflectionKey;
+static const void *PLXReflectionFiltersKey = &PLXReflectionFiltersKey;
+
+static id PLXFilter(NSString *type) {
+    Class filterClass = NSClassFromString(@"CAFilter");
+    if (![filterClass respondsToSelector:@selector(filterWithType:)]) return nil;
+    return [filterClass performSelector:@selector(filterWithType:) withObject:type];
+}
+
+static void PLXRemoveBlurTint(UIVisualEffectView *blur) {
+    NSArray *filters = objc_getAssociatedObject(blur, PLXReflectionFiltersKey);
+    if (!filters) {
+        id saturate = PLXFilter(@"colorSaturate");
+        id gaussian = PLXFilter(@"gaussianBlur");
+        if (!saturate || !gaussian) return;
+        [saturate setValue:@1.8 forKey:@"inputAmount"];
+        [gaussian setValue:@28 forKey:@"inputRadius"];
+        [gaussian setValue:@YES forKey:@"inputNormalizeEdges"];
+        filters = @[saturate, gaussian];
+        objc_setAssociatedObject(blur, PLXReflectionFiltersKey, filters, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    for (UIView *sub in blur.subviews) {
+        NSString *name = NSStringFromClass(sub.class);
+        if ([name containsString:@"Backdrop"]) {
+            if (![sub.layer.filters isEqualToArray:filters]) sub.layer.filters = filters;
+        } else if ([name containsString:@"VisualEffectSubview"] && !sub.hidden) {
+            sub.hidden = YES;
+        }
+    }
+}
 
 static UIView *PLXReflectionView(UIView *playbackView, UIView *source) {
     UIView *root = objc_getAssociatedObject(playbackView, PLXReflectionKey);
@@ -100,11 +139,14 @@ static UIView *PLXReflectionView(UIView *playbackView, UIView *source) {
     blur.tag = 2;
     [root addSubview:blur];
 
-    // Darker toward the bottom, where the controls' text sits.
+    // Like Netflix's: strongest at the crease and mostly dark by the middle
+    // of the lower half, where the controls' text sits.
     UIView *shade = [UIView new];
     shade.tag = 3;
     CAGradientLayer *gradient = [CAGradientLayer layer];
-    gradient.colors = @[(id)[UIColor colorWithWhite:0 alpha:0.25].CGColor, (id)[UIColor colorWithWhite:0 alpha:0.75].CGColor];
+    gradient.colors = @[(id)[UIColor colorWithWhite:0 alpha:0.2].CGColor, (id)[UIColor colorWithWhite:0 alpha:0.6].CGColor,
+                        (id)[UIColor colorWithWhite:0 alpha:0.88].CGColor];
+    gradient.locations = @[@0, @0.45, @1];
     [shade.layer addSublayer:gradient];
     [root addSubview:shade];
 
@@ -131,7 +173,9 @@ static void PLXLayoutReflection(UIView *playbackView, UIView *container, CGRect 
     portal.bounds = CGRectMake(0, 0, videoSize.width, videoSize.height);
     portal.center = CGPointMake(videoSize.width / 2, videoSize.height / 2);
     portal.transform = CGAffineTransformMakeScale(1, -1);
-    [root viewWithTag:2].frame = root.bounds;
+    UIVisualEffectView *blur = (UIVisualEffectView *)[root viewWithTag:2];
+    blur.frame = root.bounds;
+    PLXRemoveBlurTint(blur);
     UIView *shade = [root viewWithTag:3];
     shade.frame = root.bounds;
     [CATransaction begin];
