@@ -62,23 +62,29 @@ static void PLXTableLayoutSubviews(UITableView *self, SEL _cmd) {
     }
 }
 
-// Scroll bars are hidden everywhere. Beside the Duo's vertical bar they
+// Scroll bars are hidden on phones with the Duo's vertical bar. There they
 // landed in odd places (left of the bar's column, or mid-screen while Plex's
-// side menu slid the screen sideways), and they add little in an app of
-// poster rows. Every scroll view hides them when it reaches a window, and
-// Plex's own attempts to turn them back on are ignored.
+// side menu slid the screen sideways). Other iPhones keep them. A scroll view
+// hides them when it reaches such a window, and Plex's own attempts to turn
+// them back on are ignored there.
 static IMP PLXOrigSetShowsVertical, PLXOrigSetShowsHorizontal, PLXOrigScrollMoveToWindow;
 
+static BOOL PLXHidesScrollBars(UIScrollView *scrollView) {
+    if (@available(iOS 27.1, *)) return scrollView.window && scrollView.window.traitCollection.verticalBarEdge != 0;
+    return NO;
+}
+
 static void PLXSetShowsVertical(UIScrollView *self, SEL _cmd, BOOL shows) {
-    ((void (*)(id, SEL, BOOL))PLXOrigSetShowsVertical)(self, _cmd, NO);
+    ((void (*)(id, SEL, BOOL))PLXOrigSetShowsVertical)(self, _cmd, shows && !PLXHidesScrollBars(self));
 }
 
 static void PLXSetShowsHorizontal(UIScrollView *self, SEL _cmd, BOOL shows) {
-    ((void (*)(id, SEL, BOOL))PLXOrigSetShowsHorizontal)(self, _cmd, NO);
+    ((void (*)(id, SEL, BOOL))PLXOrigSetShowsHorizontal)(self, _cmd, shows && !PLXHidesScrollBars(self));
 }
 
 static void PLXScrollViewDidMoveToWindow(UIScrollView *self, SEL _cmd) {
     ((void (*)(id, SEL))PLXOrigScrollMoveToWindow)(self, _cmd);
+    if (!PLXHidesScrollBars(self)) return;
     if (self.showsVerticalScrollIndicator) self.showsVerticalScrollIndicator = NO;
     if (self.showsHorizontalScrollIndicator) self.showsHorizontalScrollIndicator = NO;
 }

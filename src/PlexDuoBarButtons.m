@@ -190,6 +190,48 @@ static void PLXSetTitleBackgroundHidden(NSArray<UIBarButtonItem *> *items, BOOL 
     }
 }
 
+// iOS 26 draws one glass capsule around a run of bar items, and hiding one
+// item's background inside that run does not take it out of the capsule, so
+// Plex's title sat inside the side menu button's capsule with almost no room
+// after it. A fixed space before the title starts a new run, so the title
+// shows as plain text beside the button. Plex also pins its label 8 points
+// left of the title view, spacing meant for the pre-iOS 26 bar, which put the
+// text against the button; the label starts at the view's edge instead.
+static const void *PLXTitleSpacerKey = &PLXTitleSpacerKey;
+
+static void PLXSeparateTitle(UINavigationItem *navItem) {
+    if (@available(iOS 26.0, *)) {
+        NSArray<UIBarButtonItem *> *left = navItem.leftBarButtonItems;
+        if (left.count < 2) return;
+        NSMutableArray<UIBarButtonItem *> *items = [NSMutableArray array];
+        BOOL changed = NO;
+        for (NSUInteger i = 0; i < left.count; i++) {
+            UIBarButtonItem *item = left[i];
+            BOOL needsSpacer = i > 0 && PLXHasLabelOnly(item.customView) && !objc_getAssociatedObject(left[i - 1], PLXTitleSpacerKey);
+            if (needsSpacer) {
+                UIBarButtonItem *spacer = [UIBarButtonItem fixedSpaceItemOfWidth:0];
+                objc_setAssociatedObject(spacer, PLXTitleSpacerKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                [items addObject:spacer];
+                changed = YES;
+            }
+            if (i > 0 && PLXHasLabelOnly(item.customView)) {
+                for (NSLayoutConstraint *c in item.customView.constraints) {
+                    BOOL labelLeading = [c.firstItem isKindOfClass:UILabel.class] && c.firstAttribute == NSLayoutAttributeLeading && c.secondItem == item.customView;
+                    if (labelLeading && c.constant < 0) c.constant = 0;
+                }
+            }
+            [items addObject:item];
+        }
+        if (changed) navItem.leftBarButtonItems = items;
+    }
+}
+
+static NSArray<UIBarButtonItem *> *PLXWithoutTitleSpacers(NSArray<UIBarButtonItem *> *items) {
+    NSMutableArray<UIBarButtonItem *> *result = [NSMutableArray array];
+    for (UIBarButtonItem *item in items) if (!objc_getAssociatedObject(item, PLXTitleSpacerKey)) [result addObject:item];
+    return result;
+}
+
 // verticalBar: the vertical bar is showing. useProxies: Plex's buttons are
 // replaced by standard ones there (a setting).
 // Spacing between the vertical bar's buttons (48 pt glass buttons, 12 pt apart).
@@ -206,7 +248,7 @@ static void PLXApplyToItem(UINavigationItem *navItem, BOOL verticalBar, BOOL use
     NSArray *originalRight = objc_getAssociatedObject(navItem, PLXOriginalRightKey);
     if (useProxies) {
         // Plex may set new items at any time; treat anything that is not one of our proxies as Plex's current items.
-        NSArray *left = navItem.leftBarButtonItems;
+        NSArray *left = PLXWithoutTitleSpacers(navItem.leftBarButtonItems);
         BOOL leftIsOurs = left.count && [left.firstObject isEqual:objc_getAssociatedObject(originalLeft.firstObject, PLXProxyKey)];
         if (!leftIsOurs) {
             BOOL changed = NO;
@@ -220,6 +262,7 @@ static void PLXApplyToItem(UINavigationItem *navItem, BOOL verticalBar, BOOL use
         navItem.leftBarButtonItems = originalLeft;
         objc_setAssociatedObject(navItem, PLXOriginalLeftKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
+    if (!useProxies) PLXSeparateTitle(navItem);
 
     // Right side: Plex's items (or their overflow menu), then the library tabs button.
     NSArray *right = navItem.rightBarButtonItems ?: @[];

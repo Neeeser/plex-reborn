@@ -16,13 +16,13 @@ All notable changes to this project will be documented in this file.
   - They show in the tab bar at the bottom, or in the vertical bar on iPhone Duo (Settings → Plex Reborn → Tabs)
 - Show a library's **Recommended, Library and Categories** as one menu button instead of a second tab bar, and open each library on the tab you last picked
 - Ship a **ready-to-sign IPA** with each release, which adopts the signing Apple ID's keychain group so Plex can keep your sign-in
-- Hide **scroll bars** throughout the app
 - Add a **floating mini player**: a glass capsule above the tab bar in place of Plex's flat bar, on by default, under Settings → Plex Reborn → Interface → Mini Player
 - Add **glass player controls**: the top buttons sit on glass circles and capsules and the bottom controls on one glass panel just above the home indicator, with a progress bar with round ends, in place of Plex's gray bars; on by default, under Settings → Plex Reborn → Player
 - Add a **Plex Reborn page** to Plex's Settings, there when Settings opens, with pages for Tabs, Plex Online Content, Interface and Player
 
 ### iPhone Duo
 
+- Hide **scroll bars**, which landed in odd places beside the vertical bar
 - Fill the screen with **video** on the folded and unfolded screens, and hide the Duo's vertical status bar and the home indicator during playback
 - Run the player's progress bar and top bar to the screen edge where the camera allows, and keep the bottom row of controls clear of it
 - Play video on the top half in **desk posture** (half open, crease across), with the controls on the bottom half over a reflection of the video

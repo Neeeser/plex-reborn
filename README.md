@@ -15,7 +15,6 @@ Download `PlexReborn-<version>.ipa` from the [latest release](https://github.com
 Settings are under Settings > Plex Reborn.
 
 - Plex 8.45's classic interface with iOS 26 Liquid Glass
-- Hidden scroll bars
 
 ### Playback Fixes
 
@@ -40,6 +39,7 @@ Settings are under Settings > Plex Reborn.
 - Posters, the Live TV guide and Plex's sheets reach the screen edge
 - The mini player becomes a glass card beside the vertical bar
 - The second panel is no longer mistaken for an external TV
+- Scroll bars are hidden, since they landed in odd places beside the vertical bar
 
 ## Known Issues
 
@@ -103,7 +103,7 @@ The add-on's source is in `src/`:
 | Tab bar | `src/PlexDuoTabBar.m` | Plex's tabs in the system tab bar or the Duo's vertical bar; your own tabs; library tabs as a menu; remembered library tab |
 | Top bar buttons | `src/PlexDuoBarButtons.m` | Moves Plex's side menu, cast, search and more buttons into the vertical bar |
 | Title bar | `src/PlexDuoTitleBar.m` | Clear title bar that hides while scrolling; no title on each tab's first screen |
-| Posters under the bar | `src/PlexDuoContentUnderBar.m` | Poster rows scroll under the vertical bar; scroll bars hidden |
+| Posters under the bar | `src/PlexDuoContentUnderBar.m` | Poster rows scroll under the vertical bar; scroll bars hidden beside it |
 | Live TV guide | `src/PlexDuoLiveTV.m` | The guide runs under the vertical bar to the screen edge |
 | Mini player | `src/PlexDuoMiniPlayer.m` | Floating glass capsule above the tab bar or card beside the vertical bar, full-width bar, or Plex's bar |
 | Online content | `src/PlexHideOnlineContent.m` | Hides Plex's online sources from the side menu and Home |
