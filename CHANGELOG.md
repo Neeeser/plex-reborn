@@ -32,6 +32,7 @@ All notable changes to this project will be documented in this file.
 - Turn the **mini player** into a floating glass card beside the vertical bar's tabs, or a full-width bar
 - Let Plex's own **sheets**, such as the server picker, reach the screen edge
 - Stop Plex treating the Duo's **second panel** as an external TV, which fixes taps and the status bar unfolded
+- Keep the **watched, download, watchlist, share and more buttons** beside Play at full size on the unfolded screen; Plex's tablet spacing squeezed them into narrow ovals
 
 ### Fixes
 
@@ -55,5 +56,6 @@ All notable changes to this project will be documented in this file.
 - Stop the app **freezing and closing** when an iPhone Duo is folded or unfolded during playback; Plex's video renderer and the screen change each waited for the other until iOS ended the app
 - Start Home's rows **at the top of the screen** on an unfolded iPhone Duo, as on the folded screen, instead of below an empty band
 - Keep the **reflection below the crease** steady when the player's controls fade, start it below the hinge with a gradual fade-in, keep the video's colors in it, and fade it with the hinge angle as the phone opens toward flat
+- Turn off Plex's **App Store rating prompt** ("Enjoying Plex Reborn?"). Plex Reborn is not on the App Store, so a rating there could only land on the real Plex app
 
 [v1.0.0]: https://github.com/Neeeser/plex-reborn/releases/tag/v8.45_1.0.0

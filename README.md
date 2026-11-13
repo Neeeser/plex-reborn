@@ -113,6 +113,8 @@ The add-on's source is in `src/`:
 | Transcoded seeking | `src/PlexTranscodeSeek.m` | Seeks in a transcoded stream by restarting it at the target, and restarts a stream that ends early instead of finishing the episode |
 | Keychain | `src/PlexKeychainPrefix.m` | Uses the signing team's keychain group, so release IPAs keep their sign-in |
 | Settings | `src/PlexRebornSettings.m` | The Plex Reborn page in Plex's Settings |
+| Movie and episode buttons | `src/PlexPrePlayActionRow.m` | Keeps the icon buttons beside Play at full size when Plex's tablet spacing doesn't fit, using Plex's own phone spacing |
+| No rating prompt | `src/PlexNoReviewPrompt.m` | Turns off StoreKit's App Store rating prompt, since Plex Reborn is not on the App Store |
 | Sheets | `src/PlexDuoSheets.m` | Plex's own sheets reach the screen edge beside the vertical bar |
 | Debugging | `src/PlexViewDump.m` | Writes the view tree on request; left out of release builds |
 | Simulator only | `src/PlexSim*.m`, `src/PlexSim*.c` | Lets the patched app run in the Duo simulator; compile to nothing on devices |
