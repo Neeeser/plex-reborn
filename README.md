@@ -4,7 +4,7 @@
 iOS tweak that keeps the classic [Plex](https://www.plex.tv/) 8.45 app alive on current iPhones, with Liquid Glass, streaming fixes, a cleaner Home, your own tabs and full iPhone Duo support.
 
 > [!NOTE]
-> Plex-Reborn is unofficial and not affiliated with Plex Inc. Releases include a patched copy of Plex 8.45, an app Plex distributed for free. If Plex asks for it to be taken down, releases will switch to the add-on and patch script only.
+> Plex-Reborn is unofficial and not affiliated with Plex Inc.
 
 ## Install
 
